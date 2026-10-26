@@ -5,6 +5,8 @@ Petit lanceur en Python qui affiche un menu en terminal pour démarrer :
 1. **NetHack** — `~/nh/install/games/nethack`
 2. **L'éditeur de carte** — `~/JEUX/NETHACK/NetHack_MapEditor/nhmapedit.sh`
 
+![Capture d'écran du menu du lanceur](docs/capture.png)
+
 ## Prérequis
 
 - Python 3.6 ou plus récent
