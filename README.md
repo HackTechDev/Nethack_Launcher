@@ -27,3 +27,7 @@ Tapez le numéro de l'entrée voulue, ou `q` pour quitter. Quand le programme la
 ## Personnalisation
 
 Les entrées du menu sont définies dans la liste `ENTREES`, en haut de `nethack_launcher.py`. Pour ajouter une entrée, ajoutez-y un couple `(libellé, chemin)`.
+
+## Licence
+
+Distribué sous licence MIT. Voir le fichier [LICENSE](LICENSE).
