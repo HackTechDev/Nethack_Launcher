@@ -29,6 +29,7 @@ class Entree:
     libelle: str
     chemin: Path
     arguments: list = field(default_factory=list)
+    touche: str = ""  # raccourci clavier (une lettre), facultatif
 
     def probleme(self):
         """Renvoie la raison pour laquelle le programme ne peut pas être lancé, sinon None."""
@@ -48,6 +49,7 @@ def charger_entrees(fichier: Path):
     config.read(fichier, encoding="utf-8")
 
     entrees = []
+    touches = {}
     for section in config.sections():
         if "chemin" not in config[section]:
             raise ValueError(f"section [{section}] : clé « chemin » manquante")
@@ -60,7 +62,21 @@ def charger_entrees(fichier: Path):
             ]
         except ValueError as e:
             raise ValueError(f"section [{section}] : arguments invalides ({e})")
-        entrees.append(Entree(section, libelle, Path(chemin).expanduser(), arguments))
+        touche = config[section].get("touche", "").strip().lower()
+        if touche:
+            if len(touche) != 1 or not touche.isalpha():
+                raise ValueError(f"section [{section}] : la touche doit être une lettre")
+            if touche == "q":
+                raise ValueError(f"section [{section}] : la touche « q » est réservée")
+            if touche in touches:
+                raise ValueError(
+                    f"section [{section}] : touche « {touche} » déjà utilisée"
+                    f" par [{touches[touche]}]"
+                )
+            touches[touche] = section
+        entrees.append(
+            Entree(section, libelle, Path(chemin).expanduser(), arguments, touche)
+        )
 
     if not entrees:
         raise ValueError(f"aucune entrée définie dans {fichier}")
@@ -68,12 +84,15 @@ def charger_entrees(fichier: Path):
 
 
 def trouver_entree(entrees, choix: str):
-    """Renvoie l'entrée désignée par son numéro ou son nom de section, sinon None."""
+    """Renvoie l'entrée désignée par son numéro, sa touche ou son nom, sinon None."""
     choix = choix.strip().lower()
     if choix.isdigit():
         if 1 <= int(choix) <= len(entrees):
             return entrees[int(choix) - 1]
         return None
+    for entree in entrees:
+        if entree.touche == choix:
+            return entree
     for entree in entrees:
         if entree.nom.lower() == choix:
             return entree
@@ -89,11 +108,13 @@ def afficher_menu(entrees):
     print("=" * LARGEUR)
     print("LANCEUR".center(LARGEUR).rstrip())
     print("=" * LARGEUR)
+    largeur = len(str(len(entrees)))
     for i, entree in enumerate(entrees, start=1):
+        touche = f"[{entree.touche}]" if entree.touche else "   "
         probleme = entree.probleme()
         suffixe = f"  ({probleme})" if probleme else ""
-        print(f"  {i}. {entree.libelle}{suffixe}")
-    print("  q. Quitter")
+        print(f"  {i:>{largeur}} {touche}  {entree.libelle}{suffixe}")
+    print(f"  {'':>{largeur}} [q]  Quitter")
     print("=" * LARGEUR)
 
 
@@ -145,7 +166,7 @@ def analyser_arguments(argv):
     parser.add_argument(
         "entree",
         nargs="?",
-        help="entrée à lancer directement, sans menu (numéro ou nom de section)",
+        help="entrée à lancer directement, sans menu (numéro, touche ou nom de section)",
     )
     parser.add_argument(
         "arguments",
@@ -172,7 +193,8 @@ def main(argv=None):
             probleme = entree.probleme()
             suffixe = f"  ({probleme})" if probleme else ""
             commande = shlex.join([str(entree.chemin), *entree.arguments])
-            print(f"{i}. {entree.nom} : {entree.libelle}{suffixe}\n   {commande}")
+            touche = f" [{entree.touche}]" if entree.touche else ""
+            print(f"{i}.{touche} {entree.nom} : {entree.libelle}{suffixe}\n   {commande}")
         return 0
 
     if args.entree is not None:

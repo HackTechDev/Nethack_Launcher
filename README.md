@@ -28,16 +28,17 @@ ou, depuis n'importe quel dossier (y compris via un lien symbolique, par exemple
 ./nethack_launcher.sh
 ```
 
-Tapez le numéro de l'entrée voulue, ou `q` pour quitter. Quand le programme lancé se termine, le menu s'affiche de nouveau.
+Tapez le numéro de l'entrée voulue ou sa touche (`n` pour NetHack, `e` pour l'éditeur), ou `q` pour quitter. Quand le programme lancé se termine, le menu s'affiche de nouveau.
 
 Si le programme d'une entrée n'existe pas ou n'est pas exécutable, le menu l'indique à côté de son libellé, par exemple `(introuvable)`.
 
 ### Lancement direct, sans menu
 
-Indiquez l'entrée voulue, par son numéro ou par le nom de sa section dans `config.ini` :
+Indiquez l'entrée voulue, par son numéro, sa touche ou le nom de sa section dans `config.ini` :
 
 ```sh
 ./nethack_launcher.sh 1          # première entrée du menu
+./nethack_launcher.sh e          # entrée de touche « e »
 ./nethack_launcher.sh nethack    # section [nethack]
 ./nethack_launcher.sh --liste    # affiche les entrées disponibles
 ```
@@ -58,15 +59,18 @@ Les chemins des programmes sont définis dans `config.ini`, à côté du script.
 [nethack]
 libelle = Jouer à NetHack
 chemin = ~/nh/install/games/nethack
+touche = n
 
 [editeur]
 libelle = Éditeur de carte
 chemin = ~/JEUX/NETHACK/NetHack_MapEditor/nhmapedit.sh
+touche = e
 ```
 
 - `libelle` : texte affiché dans le menu (facultatif, le nom de la section est utilisé par défaut)
 - `chemin` : programme à lancer ; `~` et les variables d'environnement (`$HOME`…) sont acceptés
 - `arguments` : options passées au programme (facultatif). Les guillemets permettent d'inclure des espaces : `arguments = -u "Mon Perso" -p Valkyrie`
+- `touche` : raccourci clavier pour choisir l'entrée dans le menu (facultatif). Une seule lettre, différente pour chaque entrée ; `q` est réservée pour quitter
 
 Pour ajouter une entrée au menu, il suffit d'ajouter une nouvelle section. Par exemple, pour lancer directement un personnage précis ou le mode exploration :
 
@@ -75,6 +79,7 @@ Pour ajouter une entrée au menu, il suffit d'ajouter une nouvelle section. Par 
 libelle = NetHack - Valkyrie
 chemin = ~/nh/install/games/nethack
 arguments = -u Brunehilde -p Valkyrie
+touche = v
 
 [exploration]
 libelle = NetHack - Mode exploration
