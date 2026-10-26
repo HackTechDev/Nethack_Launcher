@@ -30,6 +30,18 @@ ou, depuis n'importe quel dossier (y compris via un lien symbolique, par exemple
 
 Tapez le numéro de l'entrée voulue, ou `q` pour quitter. Quand le programme lancé se termine, le menu s'affiche de nouveau.
 
+### Lancement direct, sans menu
+
+Indiquez l'entrée voulue, par son numéro ou par le nom de sa section dans `config.ini` :
+
+```sh
+./nethack_launcher.sh 1          # première entrée du menu
+./nethack_launcher.sh nethack    # section [nethack]
+./nethack_launcher.sh --liste    # affiche les entrées disponibles
+```
+
+Le lanceur se termine alors avec le code de sortie du programme lancé.
+
 ## Configuration
 
 Les chemins des programmes sont définis dans `config.ini`, à côté du script. Chaque section correspond à une entrée du menu, affichée dans l'ordre du fichier :
