@@ -4,9 +4,12 @@
 import argparse
 import configparser
 import os
+import random
+import re
 import shlex
 import subprocess
 import sys
+import textwrap
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -79,6 +82,8 @@ class Entree:
 class Options:
     dossier_nethack: Path = None  # dossier de données de NetHack (HACKDIR)
     nombre_scores: int = 3
+    rumeur: bool = True
+    fichier_rumeurs: Path = None  # par défaut : rumors ou rumors.* du dossier NetHack
 
 
 def chemin_config(valeur: str):
@@ -96,6 +101,12 @@ def charger_options(config):
         options.nombre_scores = section.getint("nombre_scores", options.nombre_scores)
     except ValueError:
         raise ValueError(f"section [{SECTION_OPTIONS}] : nombre_scores doit être un entier")
+    try:
+        options.rumeur = section.getboolean("rumeur", options.rumeur)
+    except ValueError:
+        raise ValueError(f"section [{SECTION_OPTIONS}] : rumeur doit valoir oui ou non")
+    if section.get("fichier_rumeurs", "").strip():
+        options.fichier_rumeurs = chemin_config(section["fichier_rumeurs"].strip())
     return options
 
 
@@ -105,6 +116,7 @@ def charger_config(fichier: Path):
         raise ValueError(f"fichier de configuration introuvable : {fichier}")
 
     config = configparser.ConfigParser(interpolation=None)
+    config.BOOLEAN_STATES = {**config.BOOLEAN_STATES, "oui": True, "non": False}
     config.read(fichier, encoding="utf-8")
 
     entrees = []
@@ -179,6 +191,46 @@ def lire_parties(xlogfile: Path):
     return parties
 
 
+def dechiffrer_rumeur(ligne: bytes):
+    """Déchiffre une ligne du fichier des rumeurs (fonction xcrypt de NetHack)."""
+    resultat = bytearray()
+    masque = 1
+    for octet in ligne:
+        if octet & (32 | 64):
+            octet ^= masque
+        resultat.append(octet)
+        masque <<= 1
+        if masque >= 32:
+            masque = 1
+    return resultat.decode("utf-8", errors="replace")
+
+
+def trouver_fichier_rumeurs(dossier: Path):
+    """Cherche le fichier des rumeurs : rumors, sinon rumors.<langue>."""
+    if (dossier / "rumors").is_file():
+        return dossier / "rumors"
+    candidats = sorted(dossier.glob("rumors.*"), key=lambda f: ("@" in f.name, f.name))
+    return candidats[0] if candidats else None
+
+
+def lire_rumeurs(fichier: Path):
+    """Renvoie la liste des rumeurs (vraies et fausses) du fichier compilé par makedefs."""
+    try:
+        lignes = fichier.read_bytes().splitlines()
+    except OSError:
+        return []
+    rumeurs = []
+    for ligne in lignes:
+        # On saute l'en-tête : commentaires et ligne d'index (ex. 0390,027353,00006d;...)
+        if ligne.startswith(b"#") or re.fullmatch(rb"[0-9a-fA-F,;]+", ligne):
+            continue
+        # Les rumeurs sont complétées par des « _ » pour avoir une longueur fixe
+        rumeur = dechiffrer_rumeur(ligne).rstrip("_").strip()
+        if rumeur:
+            rumeurs.append(rumeur)
+    return rumeurs
+
+
 def formater_date(date: str):
     try:
         return datetime.strptime(date, "%Y%m%d").strftime("%d/%m/%Y")
@@ -189,9 +241,20 @@ def formater_date(date: str):
 def preparer_infos(options: Options):
     """Renvoie les lignes affichées sous le menu, sous forme de couples (style, texte).
 
-    Les styles possibles sont « titre », « texte » et « discret ».
+    Les styles possibles sont « titre », « texte », « discret » et « rumeur ».
     """
     infos = []
+    if options.rumeur:
+        fichier = options.fichier_rumeurs
+        if fichier is None and options.dossier_nethack is not None:
+            fichier = trouver_fichier_rumeurs(options.dossier_nethack)
+        rumeurs = lire_rumeurs(fichier) if fichier else []
+        if rumeurs:
+            texte = f"« {random.choice(rumeurs)} »"
+            for ligne in textwrap.wrap(texte, width=70):
+                infos.append(("rumeur", ligne))
+            infos.append(("texte", ""))
+
     if options.dossier_nethack is None:
         return infos
 
@@ -258,7 +321,7 @@ def afficher_menu(entrees, infos=()):
     print(f"  {'':>{largeur}} {style('[q]', JAUNE, GRAS)}  Quitter")
     print(separateur)
     if infos:
-        styles = {"titre": (GRAS,), "texte": (), "discret": (PALE,)}
+        styles = {"titre": (GRAS,), "texte": (), "discret": (PALE,), "rumeur": (CYAN,)}
         print()
         for nom_style, texte in infos:
             print(style(texte, *styles[nom_style]))
@@ -326,6 +389,7 @@ def _styles_curses():
         "titre_infos": curses.A_BOLD,
         "texte": curses.A_NORMAL,
         "discret": curses.A_DIM,
+        "rumeur": curses.A_NORMAL,
         "selection": curses.A_REVERSE | curses.A_BOLD,
     }
     if not (couleurs_autorisees and "NO_COLOR" not in os.environ and curses.has_colors()):
@@ -349,6 +413,7 @@ def _styles_curses():
         numero=cyan,
         touche=jaune | curses.A_BOLD,
         erreur=rouge | curses.A_BOLD,
+        rumeur=cyan,
     )
     return styles
 
