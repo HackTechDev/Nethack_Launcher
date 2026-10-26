@@ -32,6 +32,8 @@ Tapez le numéro de l'entrée voulue ou sa touche (`n` pour NetHack, `e` pour l'
 
 Si le programme d'une entrée n'existe pas ou n'est pas exécutable, le menu l'indique à côté de son libellé, par exemple `(introuvable)`.
 
+Le menu est affiché en couleurs dans un terminal. Elles sont désactivées automatiquement si la sortie n'est pas un terminal, si la variable d'environnement `NO_COLOR` est définie ou si `TERM=dumb`, ou à la demande avec l'option `--sans-couleur`.
+
 ### Lancement direct, sans menu
 
 Indiquez l'entrée voulue, par son numéro, sa touche ou le nom de sa section dans `config.ini` :

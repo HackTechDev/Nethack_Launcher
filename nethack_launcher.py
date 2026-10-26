@@ -22,6 +22,34 @@ LOGO = r"""
 
 LARGEUR = 40
 
+# Codes ANSI de mise en forme
+GRAS, PALE = "1", "2"
+ROUGE, VERT, JAUNE, BLEU, CYAN = "31", "32", "33", "34", "36"
+
+# Peut être forcé à False par l'option --sans-couleur
+couleurs_autorisees = True
+
+
+def couleurs_actives(flux=sys.stdout):
+    """Indique si les couleurs ANSI peuvent être utilisées sur ce flux."""
+    return (
+        couleurs_autorisees
+        and flux.isatty()
+        and "NO_COLOR" not in os.environ
+        and os.environ.get("TERM") != "dumb"
+    )
+
+
+def style(texte, *codes, flux=sys.stdout):
+    """Entoure le texte des codes ANSI donnés, si les couleurs sont actives."""
+    if not codes or not couleurs_actives(flux):
+        return texte
+    return f"\033[{';'.join(codes)}m{texte}\033[0m"
+
+
+def erreur(message):
+    print(style(message, ROUGE, flux=sys.stderr), file=sys.stderr)
+
 
 @dataclass
 class Entree:
@@ -104,18 +132,23 @@ def effacer_ecran():
 
 
 def afficher_menu(entrees):
-    print(LOGO)
-    print("=" * LARGEUR)
-    print("LANCEUR".center(LARGEUR).rstrip())
-    print("=" * LARGEUR)
+    separateur = style("=" * LARGEUR, BLEU)
+    print(style(LOGO, JAUNE, GRAS))
+    print(separateur)
+    print(style("LANCEUR".center(LARGEUR).rstrip(), GRAS))
+    print(separateur)
     largeur = len(str(len(entrees)))
     for i, entree in enumerate(entrees, start=1):
-        touche = f"[{entree.touche}]" if entree.touche else "   "
+        numero = style(f"{i:>{largeur}}", CYAN)
+        touche = style(f"[{entree.touche}]", JAUNE, GRAS) if entree.touche else "   "
         probleme = entree.probleme()
-        suffixe = f"  ({probleme})" if probleme else ""
-        print(f"  {i:>{largeur}} {touche}  {entree.libelle}{suffixe}")
-    print(f"  {'':>{largeur}} [q]  Quitter")
-    print("=" * LARGEUR)
+        if probleme:
+            libelle = style(entree.libelle, PALE) + "  " + style(f"({probleme})", ROUGE)
+        else:
+            libelle = entree.libelle
+        print(f"  {numero} {touche}  {libelle}")
+    print(f"  {'':>{largeur}} {style('[q]', JAUNE, GRAS)}  Quitter")
+    print(separateur)
 
 
 def lancer(entree: Entree, supplementaires=()):
@@ -126,7 +159,7 @@ def lancer(entree: Entree, supplementaires=()):
     chemin = entree.chemin
     probleme = entree.probleme()
     if probleme:
-        print(f"Erreur : programme {probleme} : {chemin}", file=sys.stderr)
+        erreur(f"Erreur : programme {probleme} : {chemin}")
         return 1
     try:
         # Exécution depuis le dossier du programme (utile pour les scripts relatifs)
@@ -135,7 +168,7 @@ def lancer(entree: Entree, supplementaires=()):
     except KeyboardInterrupt:
         return 130
     except OSError as e:
-        print(f"Erreur au lancement : {e}", file=sys.stderr)
+        erreur(f"Erreur au lancement : {e}")
         return 1
 
 
@@ -144,7 +177,7 @@ def menu(entrees):
         effacer_ecran()
         afficher_menu(entrees)
         try:
-            choix = input("Votre choix : ").strip().lower()
+            choix = input(style("Votre choix : ", GRAS)).strip().lower()
         except (EOFError, KeyboardInterrupt):
             print()
             return 0
@@ -156,7 +189,7 @@ def menu(entrees):
             lancer(entree)
             input("\nAppuyez sur Entrée pour revenir au menu...")
         else:
-            input("Choix invalide. Appuyez sur Entrée pour continuer...")
+            input(style("Choix invalide.", ROUGE) + " Appuyez sur Entrée pour continuer...")
 
 
 def analyser_arguments(argv):
@@ -176,16 +209,22 @@ def analyser_arguments(argv):
     parser.add_argument(
         "-l", "--liste", action="store_true", help="affiche les entrées disponibles"
     )
+    parser.add_argument(
+        "--sans-couleur", action="store_true", help="désactive les couleurs"
+    )
     return parser.parse_args(argv)
 
 
 def main(argv=None):
+    global couleurs_autorisees
     args = analyser_arguments(argv)
+    if args.sans_couleur:
+        couleurs_autorisees = False
 
     try:
         entrees = charger_entrees(FICHIER_CONFIG)
     except (ValueError, configparser.Error) as e:
-        print(f"Erreur de configuration : {e}", file=sys.stderr)
+        erreur(f"Erreur de configuration : {e}")
         return 1
 
     if args.liste:
@@ -200,7 +239,7 @@ def main(argv=None):
     if args.entree is not None:
         entree = trouver_entree(entrees, args.entree)
         if entree is None:
-            print(f"Erreur : entrée inconnue : {args.entree}", file=sys.stderr)
+            erreur(f"Erreur : entrée inconnue : {args.entree}")
             print("Utilisez --liste pour voir les entrées disponibles.", file=sys.stderr)
             return 2
         return lancer(entree, args.arguments)
