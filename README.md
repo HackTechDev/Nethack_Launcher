@@ -38,6 +38,8 @@ Quand le programme lancé se termine, appuyez sur Entrée pour revenir au menu.
 
 L'option `--texte` affiche à la place un menu simple, où l'on tape son choix puis Entrée. Ce menu est aussi utilisé automatiquement si l'entrée ou la sortie n'est pas un terminal.
 
+Sous le menu sont affichés les meilleurs scores et un résumé de la dernière partie, lus dans le journal des parties de NetHack (`xlogfile`). Les parties en mode wizard ou exploration ne comptent pas dans les meilleurs scores.
+
 Si le programme d'une entrée n'existe pas ou n'est pas exécutable, le menu l'indique à côté de son libellé, par exemple `(introuvable)`.
 
 Le menu est affiché en couleurs dans un terminal. Elles sont désactivées automatiquement si la sortie n'est pas un terminal, si la variable d'environnement `NO_COLOR` est définie ou si `TERM=dumb`, ou à la demande avec l'option `--sans-couleur`.
@@ -96,6 +98,19 @@ libelle = NetHack - Mode exploration
 chemin = ~/nh/install/games/nethack
 arguments = -X
 ```
+
+### Options du lanceur
+
+La section `[options]` est réservée : ce n'est pas une entrée du menu.
+
+```ini
+[options]
+dossier_nethack = ~/nh/install/games/lib/nethackdir
+nombre_scores = 3
+```
+
+- `dossier_nethack` : dossier de données de NetHack (le `HACKDIR` défini dans le script `nethack`), où se trouve le fichier `xlogfile`. Laissez la valeur vide pour ne pas afficher les scores
+- `nombre_scores` : nombre de meilleurs scores affichés (`0` pour aucun)
 
 ## Licence
 

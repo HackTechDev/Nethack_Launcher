@@ -8,6 +8,7 @@ import shlex
 import subprocess
 import sys
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 try:
@@ -16,6 +17,7 @@ except ImportError:  # module absent (par exemple sous Windows)
     curses = None
 
 FICHIER_CONFIG = Path(__file__).resolve().parent / "config.ini"
+SECTION_OPTIONS = "options"  # section de config.ini qui n'est pas une entrée du menu
 
 LOGO = r"""
  _   _      _   _   _            _
@@ -73,8 +75,32 @@ class Entree:
         return None
 
 
-def charger_entrees(fichier: Path):
-    """Lit le fichier de configuration et renvoie la liste des entrées du menu."""
+@dataclass
+class Options:
+    dossier_nethack: Path = None  # dossier de données de NetHack (HACKDIR)
+    nombre_scores: int = 3
+
+
+def chemin_config(valeur: str):
+    return Path(os.path.expandvars(valeur)).expanduser()
+
+
+def charger_options(config):
+    options = Options()
+    if not config.has_section(SECTION_OPTIONS):
+        return options
+    section = config[SECTION_OPTIONS]
+    if section.get("dossier_nethack", "").strip():
+        options.dossier_nethack = chemin_config(section["dossier_nethack"].strip())
+    try:
+        options.nombre_scores = section.getint("nombre_scores", options.nombre_scores)
+    except ValueError:
+        raise ValueError(f"section [{SECTION_OPTIONS}] : nombre_scores doit être un entier")
+    return options
+
+
+def charger_config(fichier: Path):
+    """Lit le fichier de configuration et renvoie (entrées du menu, options)."""
     if not fichier.is_file():
         raise ValueError(f"fichier de configuration introuvable : {fichier}")
 
@@ -84,9 +110,11 @@ def charger_entrees(fichier: Path):
     entrees = []
     touches = {}
     for section in config.sections():
+        if section == SECTION_OPTIONS:
+            continue
         if "chemin" not in config[section]:
             raise ValueError(f"section [{section}] : clé « chemin » manquante")
-        chemin = os.path.expandvars(config[section]["chemin"])
+        chemin = chemin_config(config[section]["chemin"])
         libelle = config[section].get("libelle", section)
         try:
             arguments = [
@@ -108,12 +136,87 @@ def charger_entrees(fichier: Path):
                 )
             touches[touche] = section
         entrees.append(
-            Entree(section, libelle, Path(chemin).expanduser(), arguments, touche)
+            Entree(section, libelle, chemin, arguments, touche)
         )
 
     if not entrees:
         raise ValueError(f"aucune entrée définie dans {fichier}")
-    return entrees
+    return entrees, charger_options(config)
+
+
+@dataclass
+class Partie:
+    points: int
+    personnage: str  # rôle, race, genre et alignement, ex. « Val Hum Fem Law »
+    mort: str
+    date: str  # AAAAMMJJ
+    mode: str  # "" pour une partie normale, sinon « wizard » ou « exploration »
+
+
+def lire_parties(xlogfile: Path):
+    """Lit le journal des parties de NetHack (xlogfile), dans l'ordre chronologique."""
+    try:
+        lignes = xlogfile.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return []
+
+    parties = []
+    for ligne in lignes:
+        champs = dict(c.split("=", 1) for c in ligne.split("\t") if "=" in c)
+        try:
+            points = int(champs["points"])
+            drapeaux = int(champs.get("flags", "0"), 0)
+        except (KeyError, ValueError):
+            continue
+        # Bits du champ flags : 0x1 mode wizard (debug), 0x2 mode exploration
+        mode = "wizard" if drapeaux & 0x1 else "exploration" if drapeaux & 0x2 else ""
+        personnage = " ".join(
+            champs.get(cle, "?") for cle in ("role", "race", "gender", "align")
+        )
+        parties.append(
+            Partie(points, personnage, champs.get("death", "?"), champs.get("deathdate", ""), mode)
+        )
+    return parties
+
+
+def formater_date(date: str):
+    try:
+        return datetime.strptime(date, "%Y%m%d").strftime("%d/%m/%Y")
+    except ValueError:
+        return date
+
+
+def preparer_infos(options: Options):
+    """Renvoie les lignes affichées sous le menu, sous forme de couples (style, texte).
+
+    Les styles possibles sont « titre », « texte » et « discret ».
+    """
+    infos = []
+    if options.dossier_nethack is None:
+        return infos
+
+    parties = lire_parties(options.dossier_nethack / "xlogfile")
+    # Les parties en mode wizard ou exploration ne comptent pas pour les scores
+    classees = sorted(
+        (p for p in parties if not p.mode), key=lambda p: p.points, reverse=True
+    )
+    if classees and options.nombre_scores > 0:
+        infos.append(("titre", "Meilleurs scores"))
+        for i, partie in enumerate(classees[: options.nombre_scores], start=1):
+            infos.append((
+                "texte",
+                f"  {i}. {partie.points:>6} pts  {partie.personnage}"
+                f"  {formater_date(partie.date)}  {partie.mort}",
+            ))
+    if parties:
+        derniere = parties[-1]
+        mode = f", mode {derniere.mode}" if derniere.mode else ""
+        infos.append((
+            "discret",
+            f"Dernière partie : {derniere.points} pts, {derniere.personnage},"
+            f" {derniere.mort} ({formater_date(derniere.date)}{mode})",
+        ))
+    return infos
 
 
 def trouver_entree(entrees, choix: str):
@@ -136,7 +239,7 @@ def effacer_ecran():
     os.system("clear" if os.name != "nt" else "cls")
 
 
-def afficher_menu(entrees):
+def afficher_menu(entrees, infos=()):
     separateur = style("=" * LARGEUR, BLEU)
     print(style(LOGO, JAUNE, GRAS))
     print(separateur)
@@ -154,6 +257,12 @@ def afficher_menu(entrees):
         print(f"  {numero} {touche}  {libelle}")
     print(f"  {'':>{largeur}} {style('[q]', JAUNE, GRAS)}  Quitter")
     print(separateur)
+    if infos:
+        styles = {"titre": (GRAS,), "texte": (), "discret": (PALE,)}
+        print()
+        for nom_style, texte in infos:
+            print(style(texte, *styles[nom_style]))
+        print()
 
 
 def lancer(entree: Entree, supplementaires=()):
@@ -177,11 +286,11 @@ def lancer(entree: Entree, supplementaires=()):
         return 1
 
 
-def menu_texte(entrees):
+def menu_texte(entrees, options):
     """Menu simple : on tape le numéro ou la touche de l'entrée puis Entrée."""
     while True:
         effacer_ecran()
-        afficher_menu(entrees)
+        afficher_menu(entrees, preparer_infos(options))
         try:
             choix = input(style("Votre choix : ", GRAS)).strip().lower()
         except (EOFError, KeyboardInterrupt):
@@ -198,9 +307,9 @@ def menu_texte(entrees):
             input(style("Choix invalide.", ROUGE) + " Appuyez sur Entrée pour continuer...")
 
 
-def menu_curses(entrees):
+def menu_curses(entrees, options):
     """Menu interactif plein écran : navigation aux flèches, Entrée pour lancer."""
-    return curses.wrapper(_boucle_curses, entrees)
+    return curses.wrapper(_boucle_curses, entrees, options)
 
 
 def _styles_curses():
@@ -214,6 +323,9 @@ def _styles_curses():
         "indisponible": curses.A_DIM,
         "erreur": curses.A_BOLD,
         "aide": curses.A_DIM,
+        "titre_infos": curses.A_BOLD,
+        "texte": curses.A_NORMAL,
+        "discret": curses.A_DIM,
         "selection": curses.A_REVERSE | curses.A_BOLD,
     }
     if not (couleurs_autorisees and "NO_COLOR" not in os.environ and curses.has_colors()):
@@ -241,7 +353,7 @@ def _styles_curses():
     return styles
 
 
-def _dessiner_curses(ecran, entrees, selection, message, styles):
+def _dessiner_curses(ecran, entrees, selection, infos, message, styles):
     ecran.erase()
     hauteur, largeur_ecran = ecran.getmaxyx()
 
@@ -291,6 +403,12 @@ def _dessiner_curses(ecran, entrees, selection, message, styles):
     ecrire(y + 1, 0, separateur, styles["separateur"])
     y += 3
 
+    if infos:
+        for nom_style, texte in infos:
+            ecrire(y, 0, texte, styles["titre_infos" if nom_style == "titre" else nom_style])
+            y += 1
+        y += 1
+
     ecrire(y, 0, "↑/↓ choisir · Entrée lancer · touche ou numéro · q quitter", styles["aide"])
     if message:
         ecrire(y + 1, 0, message, styles["erreur"])
@@ -311,7 +429,7 @@ def _lancer_hors_curses(ecran, entree):
     ecran.clear()
 
 
-def _boucle_curses(ecran, entrees):
+def _boucle_curses(ecran, entrees, options):
     try:
         curses.curs_set(0)
     except curses.error:
@@ -321,9 +439,10 @@ def _boucle_curses(ecran, entrees):
     styles = _styles_curses()
     selection = 0
     message = ""
+    infos = preparer_infos(options)
 
     while True:
-        _dessiner_curses(ecran, entrees, selection, message, styles)
+        _dessiner_curses(ecran, entrees, selection, infos, message, styles)
         message = ""
         try:
             touche = ecran.get_wch()
@@ -361,6 +480,7 @@ def _boucle_curses(ecran, entrees):
 
         selection = entrees.index(entree)
         _lancer_hors_curses(ecran, entree)
+        infos = preparer_infos(options)  # les scores ont pu changer
 
 
 def terminal_interactif():
@@ -406,7 +526,7 @@ def main(argv=None):
         couleurs_autorisees = False
 
     try:
-        entrees = charger_entrees(FICHIER_CONFIG)
+        entrees, options = charger_config(FICHIER_CONFIG)
     except (ValueError, configparser.Error) as e:
         erreur(f"Erreur de configuration : {e}")
         return 1
@@ -429,12 +549,12 @@ def main(argv=None):
         return lancer(entree, args.arguments)
 
     if args.texte or curses is None or not terminal_interactif():
-        return menu_texte(entrees)
+        return menu_texte(entrees, options)
     try:
-        return menu_curses(entrees)
+        return menu_curses(entrees, options)
     except curses.error as e:
         erreur(f"Menu plein écran indisponible ({e}), passage au menu texte.")
-        return menu_texte(entrees)
+        return menu_texte(entrees, options)
 
 
 if __name__ == "__main__":
