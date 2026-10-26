@@ -22,6 +22,12 @@ ou
 python3 nethack_launcher.py
 ```
 
+ou, depuis n'importe quel dossier (y compris via un lien symbolique, par exemple dans `~/bin`) :
+
+```sh
+./nethack_launcher.sh
+```
+
 Tapez le numéro de l'entrée voulue, ou `q` pour quitter. Quand le programme lancé se termine, le menu s'affiche de nouveau.
 
 ## Personnalisation
