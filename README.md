@@ -30,9 +30,24 @@ ou, depuis n'importe quel dossier (y compris via un lien symbolique, par exemple
 
 Tapez le numéro de l'entrée voulue, ou `q` pour quitter. Quand le programme lancé se termine, le menu s'affiche de nouveau.
 
-## Personnalisation
+## Configuration
 
-Les entrées du menu sont définies dans la liste `ENTREES`, en haut de `nethack_launcher.py`. Pour ajouter une entrée, ajoutez-y un couple `(libellé, chemin)`.
+Les chemins des programmes sont définis dans `config.ini`, à côté du script. Chaque section correspond à une entrée du menu, affichée dans l'ordre du fichier :
+
+```ini
+[nethack]
+libelle = Jouer à NetHack
+chemin = ~/nh/install/games/nethack
+
+[editeur]
+libelle = Éditeur de carte
+chemin = ~/JEUX/NETHACK/NetHack_MapEditor/nhmapedit.sh
+```
+
+- `libelle` : texte affiché dans le menu (facultatif, le nom de la section est utilisé par défaut)
+- `chemin` : programme à lancer ; `~` et les variables d'environnement (`$HOME`…) sont acceptés
+
+Pour ajouter une entrée au menu, il suffit d'ajouter une nouvelle section.
 
 ## Licence
 

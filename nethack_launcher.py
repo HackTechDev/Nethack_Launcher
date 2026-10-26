@@ -1,28 +1,45 @@
 #!/usr/bin/env python3
 """Lanceur : menu pour démarrer NetHack ou l'éditeur de carte."""
 
+import configparser
 import os
 import subprocess
 import sys
 from pathlib import Path
 
-HOME = Path.home()
+FICHIER_CONFIG = Path(__file__).resolve().parent / "config.ini"
 
-ENTREES = [
-    ("Jouer à NetHack", HOME / "nh/install/games/nethack"),
-    ("Éditeur de carte", HOME / "JEUX/NETHACK/NetHack_MapEditor/nhmapedit.sh"),
-]
+
+def charger_entrees(fichier: Path):
+    """Lit le fichier de configuration et renvoie la liste (libellé, chemin)."""
+    if not fichier.is_file():
+        raise ValueError(f"fichier de configuration introuvable : {fichier}")
+
+    config = configparser.ConfigParser(interpolation=None)
+    config.read(fichier, encoding="utf-8")
+
+    entrees = []
+    for section in config.sections():
+        if "chemin" not in config[section]:
+            raise ValueError(f"section [{section}] : clé « chemin » manquante")
+        chemin = os.path.expandvars(config[section]["chemin"])
+        libelle = config[section].get("libelle", section)
+        entrees.append((libelle, Path(chemin).expanduser()))
+
+    if not entrees:
+        raise ValueError(f"aucune entrée définie dans {fichier}")
+    return entrees
 
 
 def effacer_ecran():
     os.system("clear" if os.name != "nt" else "cls")
 
 
-def afficher_menu():
+def afficher_menu(entrees):
     print("=" * 34)
     print("        NETHACK - LANCEUR")
     print("=" * 34)
-    for i, (libelle, _) in enumerate(ENTREES, start=1):
+    for i, (libelle, _) in enumerate(entrees, start=1):
         print(f"  {i}. {libelle}")
     print("  q. Quitter")
     print("=" * 34)
@@ -45,9 +62,15 @@ def lancer(chemin: Path):
 
 
 def main():
+    try:
+        entrees = charger_entrees(FICHIER_CONFIG)
+    except (ValueError, configparser.Error) as e:
+        print(f"Erreur de configuration : {e}", file=sys.stderr)
+        return 1
+
     while True:
         effacer_ecran()
-        afficher_menu()
+        afficher_menu(entrees)
         try:
             choix = input("Votre choix : ").strip().lower()
         except (EOFError, KeyboardInterrupt):
@@ -56,8 +79,8 @@ def main():
 
         if choix in ("q", "quit", "quitter"):
             return 0
-        if choix.isdigit() and 1 <= int(choix) <= len(ENTREES):
-            _, chemin = ENTREES[int(choix) - 1]
+        if choix.isdigit() and 1 <= int(choix) <= len(entrees):
+            _, chemin = entrees[int(choix) - 1]
             lancer(chemin)
             input("\nAppuyez sur Entrée pour revenir au menu...")
         else:
