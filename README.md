@@ -40,6 +40,12 @@ Indiquez l'entrée voulue, par son numéro ou par le nom de sa section dans `con
 ./nethack_launcher.sh --liste    # affiche les entrées disponibles
 ```
 
+Les arguments placés après l'entrée sont transmis au programme, après ceux de `config.ini` :
+
+```sh
+./nethack_launcher.sh nethack -u MonPerso
+```
+
 Le lanceur se termine alors avec le code de sortie du programme lancé.
 
 ## Configuration
@@ -58,8 +64,21 @@ chemin = ~/JEUX/NETHACK/NetHack_MapEditor/nhmapedit.sh
 
 - `libelle` : texte affiché dans le menu (facultatif, le nom de la section est utilisé par défaut)
 - `chemin` : programme à lancer ; `~` et les variables d'environnement (`$HOME`…) sont acceptés
+- `arguments` : options passées au programme (facultatif). Les guillemets permettent d'inclure des espaces : `arguments = -u "Mon Perso" -p Valkyrie`
 
-Pour ajouter une entrée au menu, il suffit d'ajouter une nouvelle section.
+Pour ajouter une entrée au menu, il suffit d'ajouter une nouvelle section. Par exemple, pour lancer directement un personnage précis ou le mode exploration :
+
+```ini
+[valkyrie]
+libelle = NetHack - Valkyrie
+chemin = ~/nh/install/games/nethack
+arguments = -u Brunehilde -p Valkyrie
+
+[exploration]
+libelle = NetHack - Mode exploration
+chemin = ~/nh/install/games/nethack
+arguments = -X
+```
 
 ## Licence
 

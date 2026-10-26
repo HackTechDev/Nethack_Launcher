@@ -4,9 +4,10 @@
 import argparse
 import configparser
 import os
+import shlex
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 FICHIER_CONFIG = Path(__file__).resolve().parent / "config.ini"
@@ -27,6 +28,7 @@ class Entree:
     nom: str  # nom de la section dans config.ini
     libelle: str
     chemin: Path
+    arguments: list = field(default_factory=list)
 
 
 def charger_entrees(fichier: Path):
@@ -43,7 +45,14 @@ def charger_entrees(fichier: Path):
             raise ValueError(f"section [{section}] : clé « chemin » manquante")
         chemin = os.path.expandvars(config[section]["chemin"])
         libelle = config[section].get("libelle", section)
-        entrees.append(Entree(section, libelle, Path(chemin).expanduser()))
+        try:
+            arguments = [
+                os.path.expanduser(os.path.expandvars(arg))
+                for arg in shlex.split(config[section].get("arguments", ""))
+            ]
+        except ValueError as e:
+            raise ValueError(f"section [{section}] : arguments invalides ({e})")
+        entrees.append(Entree(section, libelle, Path(chemin).expanduser(), arguments))
 
     if not entrees:
         raise ValueError(f"aucune entrée définie dans {fichier}")
@@ -78,8 +87,11 @@ def afficher_menu(entrees):
     print("=" * LARGEUR)
 
 
-def lancer(entree: Entree):
-    """Lance le programme de l'entrée et renvoie son code de sortie."""
+def lancer(entree: Entree, supplementaires=()):
+    """Lance le programme de l'entrée et renvoie son code de sortie.
+
+    Les arguments supplémentaires sont ajoutés après ceux de la configuration.
+    """
     chemin = entree.chemin
     if not chemin.is_file():
         print(f"Erreur : fichier introuvable : {chemin}", file=sys.stderr)
@@ -89,7 +101,8 @@ def lancer(entree: Entree):
         return 1
     try:
         # Exécution depuis le dossier du programme (utile pour les scripts relatifs)
-        return subprocess.run([str(chemin)], cwd=chemin.parent).returncode
+        commande = [str(chemin), *entree.arguments, *supplementaires]
+        return subprocess.run(commande, cwd=chemin.parent).returncode
     except KeyboardInterrupt:
         return 130
     except OSError as e:
@@ -127,6 +140,11 @@ def analyser_arguments(argv):
         help="entrée à lancer directement, sans menu (numéro ou nom de section)",
     )
     parser.add_argument(
+        "arguments",
+        nargs=argparse.REMAINDER,
+        help="arguments supplémentaires transmis au programme lancé",
+    )
+    parser.add_argument(
         "-l", "--liste", action="store_true", help="affiche les entrées disponibles"
     )
     return parser.parse_args(argv)
@@ -143,7 +161,8 @@ def main(argv=None):
 
     if args.liste:
         for i, entree in enumerate(entrees, start=1):
-            print(f"{i}. {entree.nom} : {entree.libelle}")
+            commande = shlex.join([str(entree.chemin), *entree.arguments])
+            print(f"{i}. {entree.nom} : {entree.libelle}\n   {commande}")
         return 0
 
     if args.entree is not None:
@@ -152,7 +171,7 @@ def main(argv=None):
             print(f"Erreur : entrée inconnue : {args.entree}", file=sys.stderr)
             print("Utilisez --liste pour voir les entrées disponibles.", file=sys.stderr)
             return 2
-        return lancer(entree)
+        return lancer(entree, args.arguments)
 
     return menu(entrees)
 
