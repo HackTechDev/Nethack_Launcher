@@ -9,7 +9,7 @@ Petit lanceur en Python qui affiche un menu en terminal pour démarrer :
 
 ## Prérequis
 
-- Python 3.6 ou plus récent
+- Python 3.9 ou plus récent
 - Les deux programmes ci-dessus installés et exécutables
 
 ## Utilisation
