@@ -463,8 +463,13 @@ def _dessiner_curses(ecran, entrees, selection, infos, message, styles):
             else:
                 ecrire(y, x + 2, entree.libelle)
         y += 1
-    x = ecrire(y, 2 + largeur + 1, "[q]", styles["touche"])
-    ecrire(y, x + 2, "Quitter")
+    # La ligne « Quitter » suit les entrées : elle est sélectionnée quand selection == len(entrees)
+    if selection == len(entrees):
+        texte = f"  {'':>{largeur}} [q]  Quitter"
+        ecrire(y, 0, texte.ljust(LARGEUR), styles["selection"])
+    else:
+        x = ecrire(y, 2 + largeur + 1, "[q]", styles["touche"])
+        ecrire(y, x + 2, "Quitter")
     ecrire(y + 1, 0, separateur, styles["separateur"])
     y += 3
 
@@ -502,7 +507,8 @@ def _boucle_curses(ecran, entrees, options):
     curses.set_escdelay(25)
     ecran.keypad(True)
     styles = _styles_curses()
-    selection = 0
+    selection = 0  # de 0 à len(entrees) inclus, la dernière ligne étant « Quitter »
+    nombre_lignes = len(entrees) + 1
     message = ""
     infos = preparer_infos(options)
 
@@ -517,19 +523,21 @@ def _boucle_curses(ecran, entrees, options):
             continue
 
         if touche == curses.KEY_UP:
-            selection = (selection - 1) % len(entrees)
+            selection = (selection - 1) % nombre_lignes
             continue
         if touche == curses.KEY_DOWN:
-            selection = (selection + 1) % len(entrees)
+            selection = (selection + 1) % nombre_lignes
             continue
         if touche == curses.KEY_HOME:
             selection = 0
             continue
         if touche == curses.KEY_END:
-            selection = len(entrees) - 1
+            selection = nombre_lignes - 1
             continue
 
         if touche in ("\n", "\r", curses.KEY_ENTER):
+            if selection == len(entrees):
+                return 0
             entree = entrees[selection]
         elif isinstance(touche, str) and touche.isprintable() and touche != " ":
             if touche.lower() == "q":

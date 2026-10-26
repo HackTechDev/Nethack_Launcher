@@ -32,7 +32,7 @@ ou, depuis n'importe quel dossier (y compris via un lien symbolique, par exemple
 
 Le menu s'affiche en plein écran :
 
-- `↑` / `↓` pour choisir une entrée, `Entrée` pour la lancer ;
+- `↑` / `↓` pour choisir une entrée, `Entrée` pour la lancer (la ligne « Quitter » est aussi accessible aux flèches) ;
 - ou directement le numéro de l'entrée ou sa touche (`n` pour NetHack, `e` pour l'éditeur) ;
 - `q` ou `Échap` pour quitter.
 
