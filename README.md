@@ -30,6 +30,8 @@ ou, depuis n'importe quel dossier (y compris via un lien symbolique, par exemple
 
 Tapez le numéro de l'entrée voulue, ou `q` pour quitter. Quand le programme lancé se termine, le menu s'affiche de nouveau.
 
+Si le programme d'une entrée n'existe pas ou n'est pas exécutable, le menu l'indique à côté de son libellé, par exemple `(introuvable)`.
+
 ### Lancement direct, sans menu
 
 Indiquez l'entrée voulue, par son numéro ou par le nom de sa section dans `config.ini` :

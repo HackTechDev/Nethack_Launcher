@@ -30,6 +30,14 @@ class Entree:
     chemin: Path
     arguments: list = field(default_factory=list)
 
+    def probleme(self):
+        """Renvoie la raison pour laquelle le programme ne peut pas être lancé, sinon None."""
+        if not self.chemin.is_file():
+            return "introuvable"
+        if not os.access(self.chemin, os.X_OK):
+            return "non exécutable"
+        return None
+
 
 def charger_entrees(fichier: Path):
     """Lit le fichier de configuration et renvoie la liste des entrées du menu."""
@@ -82,7 +90,9 @@ def afficher_menu(entrees):
     print("LANCEUR".center(LARGEUR).rstrip())
     print("=" * LARGEUR)
     for i, entree in enumerate(entrees, start=1):
-        print(f"  {i}. {entree.libelle}")
+        probleme = entree.probleme()
+        suffixe = f"  ({probleme})" if probleme else ""
+        print(f"  {i}. {entree.libelle}{suffixe}")
     print("  q. Quitter")
     print("=" * LARGEUR)
 
@@ -93,11 +103,9 @@ def lancer(entree: Entree, supplementaires=()):
     Les arguments supplémentaires sont ajoutés après ceux de la configuration.
     """
     chemin = entree.chemin
-    if not chemin.is_file():
-        print(f"Erreur : fichier introuvable : {chemin}", file=sys.stderr)
-        return 1
-    if not os.access(chemin, os.X_OK):
-        print(f"Erreur : fichier non exécutable : {chemin}", file=sys.stderr)
+    probleme = entree.probleme()
+    if probleme:
+        print(f"Erreur : programme {probleme} : {chemin}", file=sys.stderr)
         return 1
     try:
         # Exécution depuis le dossier du programme (utile pour les scripts relatifs)
@@ -161,8 +169,10 @@ def main(argv=None):
 
     if args.liste:
         for i, entree in enumerate(entrees, start=1):
+            probleme = entree.probleme()
+            suffixe = f"  ({probleme})" if probleme else ""
             commande = shlex.join([str(entree.chemin), *entree.arguments])
-            print(f"{i}. {entree.nom} : {entree.libelle}\n   {commande}")
+            print(f"{i}. {entree.nom} : {entree.libelle}{suffixe}\n   {commande}")
         return 0
 
     if args.entree is not None:
