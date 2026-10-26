@@ -28,7 +28,15 @@ ou, depuis n'importe quel dossier (y compris via un lien symbolique, par exemple
 ./nethack_launcher.sh
 ```
 
-Tapez le numéro de l'entrée voulue ou sa touche (`n` pour NetHack, `e` pour l'éditeur), ou `q` pour quitter. Quand le programme lancé se termine, le menu s'affiche de nouveau.
+Le menu s'affiche en plein écran :
+
+- `↑` / `↓` pour choisir une entrée, `Entrée` pour la lancer ;
+- ou directement le numéro de l'entrée ou sa touche (`n` pour NetHack, `e` pour l'éditeur) ;
+- `q` ou `Échap` pour quitter.
+
+Quand le programme lancé se termine, appuyez sur Entrée pour revenir au menu.
+
+L'option `--texte` affiche à la place un menu simple, où l'on tape son choix puis Entrée. Ce menu est aussi utilisé automatiquement si l'entrée ou la sortie n'est pas un terminal.
 
 Si le programme d'une entrée n'existe pas ou n'est pas exécutable, le menu l'indique à côté de son libellé, par exemple `(introuvable)`.
 

@@ -10,6 +10,11 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+try:
+    import curses
+except ImportError:  # module absent (par exemple sous Windows)
+    curses = None
+
 FICHIER_CONFIG = Path(__file__).resolve().parent / "config.ini"
 
 LOGO = r"""
@@ -172,7 +177,8 @@ def lancer(entree: Entree, supplementaires=()):
         return 1
 
 
-def menu(entrees):
+def menu_texte(entrees):
+    """Menu simple : on tape le numéro ou la touche de l'entrée puis Entrée."""
     while True:
         effacer_ecran()
         afficher_menu(entrees)
@@ -190,6 +196,179 @@ def menu(entrees):
             input("\nAppuyez sur Entrée pour revenir au menu...")
         else:
             input(style("Choix invalide.", ROUGE) + " Appuyez sur Entrée pour continuer...")
+
+
+def menu_curses(entrees):
+    """Menu interactif plein écran : navigation aux flèches, Entrée pour lancer."""
+    return curses.wrapper(_boucle_curses, entrees)
+
+
+def _styles_curses():
+    """Renvoie les attributs curses de chaque élément du menu."""
+    styles = {
+        "logo": curses.A_BOLD,
+        "separateur": curses.A_NORMAL,
+        "titre": curses.A_BOLD,
+        "numero": curses.A_NORMAL,
+        "touche": curses.A_BOLD,
+        "indisponible": curses.A_DIM,
+        "erreur": curses.A_BOLD,
+        "aide": curses.A_DIM,
+        "selection": curses.A_REVERSE | curses.A_BOLD,
+    }
+    if not (couleurs_autorisees and "NO_COLOR" not in os.environ and curses.has_colors()):
+        return styles
+
+    curses.start_color()
+    try:
+        curses.use_default_colors()
+        fond = -1
+    except curses.error:
+        fond = curses.COLOR_BLACK
+    for numero, couleur in enumerate(
+        (curses.COLOR_YELLOW, curses.COLOR_BLUE, curses.COLOR_CYAN, curses.COLOR_RED),
+        start=1,
+    ):
+        curses.init_pair(numero, couleur, fond)
+    jaune, bleu, cyan, rouge = (curses.color_pair(n) for n in range(1, 5))
+    styles.update(
+        logo=jaune | curses.A_BOLD,
+        separateur=bleu,
+        numero=cyan,
+        touche=jaune | curses.A_BOLD,
+        erreur=rouge | curses.A_BOLD,
+    )
+    return styles
+
+
+def _dessiner_curses(ecran, entrees, selection, message, styles):
+    ecran.erase()
+    hauteur, largeur_ecran = ecran.getmaxyx()
+
+    def ecrire(y, x, texte, attribut=curses.A_NORMAL):
+        """Écrit le texte en le coupant au bord de l'écran ; renvoie la colonne suivante."""
+        place = largeur_ecran - x - 1
+        if y >= hauteur or place <= 0:
+            return x
+        try:
+            ecran.addstr(y, x, texte[:place], attribut)
+        except curses.error:
+            pass
+        return x + len(texte)
+
+    y = 0
+    for ligne in LOGO.strip("\n").splitlines():
+        ecrire(y, 0, ligne, styles["logo"])
+        y += 1
+    y += 1
+    separateur = "=" * LARGEUR
+    ecrire(y, 0, separateur, styles["separateur"])
+    ecrire(y + 1, 0, "LANCEUR".center(LARGEUR).rstrip(), styles["titre"])
+    ecrire(y + 2, 0, separateur, styles["separateur"])
+    y += 3
+
+    largeur = len(str(len(entrees)))
+    for i, entree in enumerate(entrees):
+        probleme = entree.probleme()
+        numero = f"{i + 1:>{largeur}}"
+        touche = f"[{entree.touche}]" if entree.touche else "   "
+        if i == selection:
+            texte = f"  {numero} {touche}  {entree.libelle}"
+            if probleme:
+                texte += f"  ({probleme})"
+            ecrire(y, 0, texte.ljust(LARGEUR), styles["selection"])
+        else:
+            x = ecrire(y, 2, numero, styles["numero"])
+            x = ecrire(y, x + 1, touche, styles["touche"])
+            if probleme:
+                x = ecrire(y, x + 2, entree.libelle, styles["indisponible"])
+                ecrire(y, x + 2, f"({probleme})", styles["erreur"])
+            else:
+                ecrire(y, x + 2, entree.libelle)
+        y += 1
+    x = ecrire(y, 2 + largeur + 1, "[q]", styles["touche"])
+    ecrire(y, x + 2, "Quitter")
+    ecrire(y + 1, 0, separateur, styles["separateur"])
+    y += 3
+
+    ecrire(y, 0, "↑/↓ choisir · Entrée lancer · touche ou numéro · q quitter", styles["aide"])
+    if message:
+        ecrire(y + 1, 0, message, styles["erreur"])
+    ecran.refresh()
+
+
+def _lancer_hors_curses(ecran, entree):
+    """Quitte temporairement le mode curses le temps d'exécuter le programme."""
+    curses.def_prog_mode()
+    curses.endwin()
+    effacer_ecran()
+    lancer(entree)
+    try:
+        input("\nAppuyez sur Entrée pour revenir au menu...")
+    except (EOFError, KeyboardInterrupt):
+        pass
+    curses.reset_prog_mode()
+    ecran.clear()
+
+
+def _boucle_curses(ecran, entrees):
+    try:
+        curses.curs_set(0)
+    except curses.error:
+        pass
+    curses.set_escdelay(25)
+    ecran.keypad(True)
+    styles = _styles_curses()
+    selection = 0
+    message = ""
+
+    while True:
+        _dessiner_curses(ecran, entrees, selection, message, styles)
+        message = ""
+        try:
+            touche = ecran.get_wch()
+        except KeyboardInterrupt:
+            return 0
+        except curses.error:
+            continue
+
+        if touche == curses.KEY_UP:
+            selection = (selection - 1) % len(entrees)
+            continue
+        if touche == curses.KEY_DOWN:
+            selection = (selection + 1) % len(entrees)
+            continue
+        if touche == curses.KEY_HOME:
+            selection = 0
+            continue
+        if touche == curses.KEY_END:
+            selection = len(entrees) - 1
+            continue
+
+        if touche in ("\n", "\r", curses.KEY_ENTER):
+            entree = entrees[selection]
+        elif isinstance(touche, str) and touche.isprintable() and touche != " ":
+            if touche.lower() == "q":
+                return 0
+            entree = trouver_entree(entrees, touche)
+            if entree is None:
+                message = f"Touche inconnue : {touche}"
+                continue
+        elif touche == "\x1b":  # Échap
+            return 0
+        else:
+            continue  # redimensionnement ou touche spéciale ignorée
+
+        selection = entrees.index(entree)
+        _lancer_hors_curses(ecran, entree)
+
+
+def terminal_interactif():
+    return (
+        sys.stdin.isatty()
+        and sys.stdout.isatty()
+        and os.environ.get("TERM", "dumb") != "dumb"
+    )
 
 
 def analyser_arguments(argv):
@@ -211,6 +390,11 @@ def analyser_arguments(argv):
     )
     parser.add_argument(
         "--sans-couleur", action="store_true", help="désactive les couleurs"
+    )
+    parser.add_argument(
+        "--texte",
+        action="store_true",
+        help="menu simple sans navigation aux flèches (pas de curses)",
     )
     return parser.parse_args(argv)
 
@@ -244,7 +428,13 @@ def main(argv=None):
             return 2
         return lancer(entree, args.arguments)
 
-    return menu(entrees)
+    if args.texte or curses is None or not terminal_interactif():
+        return menu_texte(entrees)
+    try:
+        return menu_curses(entrees)
+    except curses.error as e:
+        erreur(f"Menu plein écran indisponible ({e}), passage au menu texte.")
+        return menu_texte(entrees)
 
 
 if __name__ == "__main__":
