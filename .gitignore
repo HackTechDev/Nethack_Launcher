@@ -31,3 +31,6 @@ htmlcov/
 *.swp
 *~
 .DS_Store
+
+# Fichiers locaux
+claude_task.md
