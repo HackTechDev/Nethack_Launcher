@@ -9,6 +9,16 @@ from pathlib import Path
 
 FICHIER_CONFIG = Path(__file__).resolve().parent / "config.ini"
 
+LOGO = r"""
+ _   _      _   _   _            _
+| \ | | ___| |_| | | | __ _  ___| | __
+|  \| |/ _ \ __| |_| |/ _` |/ __| |/ /
+| |\  |  __/ |_|  _  | (_| | (__|   <
+|_| \_|\___|\__|_| |_|\__,_|\___|_|\_\
+"""
+
+LARGEUR = 40
+
 
 def charger_entrees(fichier: Path):
     """Lit le fichier de configuration et renvoie la liste (libellé, chemin)."""
@@ -36,13 +46,14 @@ def effacer_ecran():
 
 
 def afficher_menu(entrees):
-    print("=" * 34)
-    print("        NETHACK - LANCEUR")
-    print("=" * 34)
+    print(LOGO)
+    print("=" * LARGEUR)
+    print("LANCEUR".center(LARGEUR).rstrip())
+    print("=" * LARGEUR)
     for i, (libelle, _) in enumerate(entrees, start=1):
         print(f"  {i}. {libelle}")
     print("  q. Quitter")
-    print("=" * 34)
+    print("=" * LARGEUR)
 
 
 def lancer(chemin: Path):
