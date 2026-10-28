@@ -761,6 +761,15 @@ def analyser_arguments(argv):
         "--sans-couleur", action="store_true", help="désactive les couleurs"
     )
     parser.add_argument(
+        "-c",
+        "--config",
+        metavar="FICHIER",
+        action="append",
+        type=Path,
+        help="fichier de configuration à utiliser à la place de config.ini et de la"
+        " configuration personnelle ; peut être répété, les fichiers étant lus dans l'ordre",
+    )
+    parser.add_argument(
         "--theme",
         choices=THEMES,
         help="thème de couleurs (remplace l'option « theme » de config.ini)",
@@ -779,7 +788,7 @@ def main(argv=None):
     if args.sans_couleur:
         couleurs_autorisees = False
 
-    fichiers = fichiers_config()
+    fichiers = [f.expanduser() for f in args.config] if args.config else fichiers_config()
     try:
         entrees, options = charger_config(fichiers)
     except (ValueError, configparser.Error) as e:

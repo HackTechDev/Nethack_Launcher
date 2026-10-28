@@ -137,6 +137,15 @@ masquer = oui
 
 `./nethack_launcher.sh --liste` indique les fichiers de configuration utilisés.
 
+### Choisir un autre fichier de configuration
+
+L'option `--config` (ou `-c`) utilise le fichier indiqué **à la place** de `config.ini` et de la configuration personnelle. Elle peut être répétée : les fichiers sont alors lus dans l'ordre, comme ci-dessus.
+
+```sh
+./nethack_launcher.sh --config ~/nethack-tournoi.ini
+./nethack_launcher.sh -c config.ini -c ~/essais.ini
+```
+
 ### Options du lanceur
 
 La section `[options]` est réservée : ce n'est pas une entrée du menu.
