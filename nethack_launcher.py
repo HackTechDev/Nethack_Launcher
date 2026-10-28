@@ -289,6 +289,7 @@ class Partie:
     mort: str
     date: str  # AAAAMMJJ
     mode: str  # "" pour une partie normale, sinon « wizard » ou « exploration »
+    champs: dict = field(default_factory=dict)  # tous les champs de la ligne du xlogfile
 
 
 def lire_parties(xlogfile: Path):
@@ -312,9 +313,117 @@ def lire_parties(xlogfile: Path):
             champs.get(cle, "?") for cle in ("role", "race", "gender", "align")
         )
         parties.append(
-            Partie(points, personnage, champs.get("death", "?"), champs.get("deathdate", ""), mode)
+            Partie(
+                points, personnage, champs.get("death", "?"),
+                champs.get("deathdate", ""), mode, champs,
+            )
         )
     return parties
+
+
+ROLES = {
+    "Arc": "Archéologue", "Bar": "Barbare", "Cav": "Homme des cavernes",
+    "Hea": "Guérisseur", "Kni": "Chevalier", "Mon": "Moine", "Pri": "Prêtre",
+    "Ran": "Rôdeur", "Rog": "Voleur", "Sam": "Samouraï", "Tou": "Touriste",
+    "Val": "Valkyrie", "Wiz": "Magicien",
+}
+ROLES_FEMININS = {
+    "Arc": "Archéologue", "Cav": "Femme des cavernes", "Hea": "Guérisseuse",
+    "Kni": "Chevalière", "Mon": "Moniale", "Pri": "Prêtresse", "Ran": "Rôdeuse",
+    "Rog": "Voleuse", "Wiz": "Magicienne",
+}
+RACES = {"Hum": "humain", "Elf": "elfe", "Dwa": "nain", "Gno": "gnome", "Orc": "orc"}
+GENRES = {"Mal": "homme", "Fem": "femme"}
+ALIGNEMENTS = {"Law": "loyal", "Neu": "neutre", "Cha": "chaotique"}
+CONDUITES = {
+    "foodless": "sans manger", "vegan": "végétalien", "vegetarian": "végétarien",
+    "atheist": "athée", "weaponless": "sans arme", "pacifist": "pacifiste",
+    "illiterate": "illettré", "polyless": "sans polymorphie d'objet",
+    "polyselfless": "sans se polymorpher", "wishless": "sans vœu",
+    "artiwishless": "sans vœu d'artefact", "genocideless": "sans génocide",
+    "elberethless": "sans Elbereth", "sokoban": "Sokoban sans tricher",
+    "blind": "aveugle", "nudist": "nudiste", "bonesless": "sans ossements",
+    "petless": "sans familier", "unrerolled": "sans relance",
+}
+EXPLOITS = {
+    "entered_the_gnomish_mines": "Mines des gnomes", "entered_mine_town": "Minetown",
+    "entered_a_shop": "une boutique", "entered_a_temple": "un temple",
+    "consulted_the_oracle": "consulté l'Oracle", "read_a_Discworld_novel": "lu un roman",
+    "entered_sokoban": "Sokoban", "entered_bigroom": "la Grande salle",
+    "entered_gehennom": "la Géhenne",
+}
+DESCRIPTION_PARTIE = "Entrée : voir le détail de cette partie."
+
+
+def decrire_personnage(champs):
+    """Ex. « Valkyrie humaine, femme, loyale (Val Hum Fem Law) »."""
+    role, race = champs.get("role", "?"), champs.get("race", "?")
+    genre, alignement = champs.get("gender", "?"), champs.get("align", "?")
+    feminin = genre == "Fem"
+    nom_role = (ROLES_FEMININS.get(role) if feminin else None) or ROLES.get(role, role)
+    nom_race = RACES.get(race, race)
+    nom_alignement = ALIGNEMENTS.get(alignement, alignement)
+    if feminin:
+        nom_race = {"humain": "humaine", "nain": "naine"}.get(nom_race, nom_race)
+        nom_alignement = {"loyal": "loyale"}.get(nom_alignement, nom_alignement)
+    return (
+        f"{nom_role} {nom_race}, {GENRES.get(genre, genre)}, {nom_alignement}"
+        f" ({role} {race} {genre} {alignement})"
+    )
+
+
+def traduire_exploit(exploit):
+    if exploit.startswith("attained_the_rank_of_"):
+        return "rang « " + exploit.removeprefix("attained_the_rank_of_").replace("_", " ") + " »"
+    return EXPLOITS.get(exploit, exploit.replace("_", " "))
+
+
+def details_partie(partie: Partie, largeur=76):
+    """Renvoie les lignes de l'écran de détail d'une partie, en couples (style, texte)."""
+    c = partie.champs
+    lignes = [("titre_infos", f"Partie de {c.get('name', '?')}"), ("texte", "")]
+    marge = 24
+
+    def ajouter(etiquette, valeur):
+        if valeur in (None, ""):
+            return
+        for i, morceau in enumerate(textwrap.wrap(str(valeur), width=max(largeur - marge, 20))):
+            lignes.append(("texte", f"  {etiquette if i == 0 else '':<{marge - 2}}{morceau}"))
+
+    def entier(cle):
+        try:
+            return int(c[cle])
+        except (KeyError, ValueError):
+            return None
+
+    def horodatage(cle_epoch, cle_date):
+        if entier(cle_epoch):
+            return f"{datetime.fromtimestamp(entier(cle_epoch)):%d/%m/%Y à %H:%M}"
+        return formater_date(c.get(cle_date, ""))
+
+    ajouter("Personnage", decrire_personnage(c))
+    ajouter("Points", partie.points)
+    fin = c.get("death", "?") + (f", while {c['while']}" if c.get("while") else "")
+    ajouter("Fin de la partie", fin)
+    ajouter("Mode de jeu", partie.mode)
+    ajouter("Début", horodatage("starttime", "birthdate"))
+    ajouter("Fin", horodatage("endtime", "deathdate"))
+    if entier("realtime") is not None:
+        ajouter("Temps de jeu", formater_duree(entier("realtime")))
+    ajouter("Tours", c.get("turns"))
+    if entier("maxlvl") is not None:
+        ajouter("Profondeur", f"niveau {entier('maxlvl')} au plus profond,"
+                f" fin au niveau {c.get('deathlev', '?')}")
+    if entier("hp") is not None:
+        ajouter("Points de vie", f"{entier('hp')} / {c.get('maxhp', '?')}")
+    ajouter("Or", c.get("gold"))
+    if entier("wish_cnt"):
+        ajouter("Vœux", c["wish_cnt"])
+    conduites = [CONDUITES.get(x, x) for x in c.get("conductX", "").split(",") if x]
+    ajouter("Conduites respectées", ", ".join(conduites) or "aucune")
+    exploits = [traduire_exploit(x) for x in c.get("achieveX", "").split(",") if x]
+    ajouter("Exploits", ", ".join(exploits) or "aucun")
+    return lignes
 
 
 def dechiffrer_rumeur(ligne: bytes):
@@ -364,11 +473,17 @@ def formater_date(date: str):
         return date
 
 
-def preparer_infos(options: Options):
-    """Renvoie les lignes affichées sous le menu, sous forme de couples (style, texte).
+@dataclass
+class LigneInfo:
+    """Ligne affichée sous le menu. Celles qui ont une partie peuvent être choisies."""
+    style: str  # « titre », « texte », « discret » ou « rumeur »
+    texte: str
+    partie: Partie = None
+    code: str = ""  # commande du menu texte pour voir le détail, ex. « s1 »
 
-    Les styles possibles sont « titre », « texte », « discret » et « rumeur ».
-    """
+
+def preparer_infos(options: Options):
+    """Renvoie les lignes affichées sous le menu (rumeur, scores, dernière partie)."""
     infos = []
     if options.rumeur:
         fichier = options.fichier_rumeurs
@@ -378,8 +493,8 @@ def preparer_infos(options: Options):
         if rumeurs:
             texte = f"« {random.choice(rumeurs)} »"
             for ligne in textwrap.wrap(texte, width=70):
-                infos.append(("rumeur", ligne))
-            infos.append(("texte", ""))
+                infos.append(LigneInfo("rumeur", ligne))
+            infos.append(LigneInfo("texte", ""))
 
     if options.dossier_nethack is None:
         return infos
@@ -390,20 +505,24 @@ def preparer_infos(options: Options):
         (p for p in parties if not p.mode), key=lambda p: p.points, reverse=True
     )
     if classees and options.nombre_scores > 0:
-        infos.append(("titre", "Meilleurs scores"))
+        infos.append(LigneInfo("titre", "Meilleurs scores"))
         for i, partie in enumerate(classees[: options.nombre_scores], start=1):
-            infos.append((
+            infos.append(LigneInfo(
                 "texte",
                 f"  {i}. {partie.points:>6} pts  {partie.personnage}"
                 f"  {formater_date(partie.date)}  {partie.mort}",
+                partie,
+                f"s{i}",
             ))
     if parties:
         derniere = parties[-1]
         mode = f", mode {derniere.mode}" if derniere.mode else ""
-        infos.append((
+        infos.append(LigneInfo(
             "discret",
             f"Dernière partie : {derniere.points} pts, {derniere.personnage},"
             f" {derniere.mort} ({formater_date(derniere.date)}{mode})",
+            derniere,
+            "sd",
         ))
     return infos
 
@@ -511,9 +630,17 @@ def afficher_menu(entrees, infos=()):
     print(separateur)
     if infos:
         print()
-        for nom_style, texte in infos:
-            print(style(texte, "titre_infos" if nom_style == "titre" else nom_style))
+        for ligne in infos:
+            print(style(ligne.texte, "titre_infos" if ligne.style == "titre" else ligne.style))
+        codes = [ligne.code for ligne in infos if ligne.partie]
+        if codes:
+            print(style(f"\nDétail d'une partie : tapez {', '.join(codes)}", "aide"))
         print()
+
+
+def afficher_partie(partie: Partie):
+    for nom_style, texte in details_partie(partie):
+        print(style(texte, nom_style))
 
 
 def ecrire_journal(journal: Path, entree: Entree, debut: datetime, duree: float, code: int):
@@ -622,7 +749,8 @@ def menu_texte(entrees_config, options):
     while True:
         entrees = ajouter_fichiers_recents(entrees_config)  # les fichiers ont pu changer
         effacer_ecran()
-        afficher_menu(entrees, preparer_infos(options))
+        infos = preparer_infos(options)
+        afficher_menu(entrees, infos)
         try:
             choix = input(style("Votre choix : ", "invite")).strip().lower()
         except (EOFError, KeyboardInterrupt):
@@ -631,6 +759,12 @@ def menu_texte(entrees_config, options):
 
         if choix in ("q", "quit", "quitter"):
             return 0
+        parties = {ligne.code: ligne.partie for ligne in infos if ligne.partie}
+        if choix in parties:
+            effacer_ecran()
+            afficher_partie(parties[choix])
+            input("\nAppuyez sur Entrée pour revenir au menu...")
+            continue
         entree = trouver_entree(entrees, choix)
         if entree:
             lancer(entree, journal=options.journal)
@@ -739,22 +873,30 @@ def _dessiner_curses(ecran, entrees, selection, infos, message, styles):
     ecrire(y + 1, 0, separateur, styles["separateur"])
     y += 3
 
+    # Les lignes de parties (scores, dernière partie) se choisissent après « Quitter »
+    indice = len(entrees) + 1
     if infos:
-        for nom_style, texte in infos:
-            ecrire(y, 0, texte, styles["titre_infos" if nom_style == "titre" else nom_style])
+        for ligne in infos:
+            nom_style = "titre_infos" if ligne.style == "titre" else ligne.style
+            if ligne.partie:
+                zones[y] = indice
+                if indice == selection:
+                    nom_style = "selection"
+                indice += 1
+            ecrire(y, 0, ligne.texte, styles[nom_style])
             y += 1
         y += 1
 
-    # Description de la ligne sélectionnée, si au moins une entrée en a une. On réserve
-    # la place de la plus longue pour que l'aide ne bouge pas d'une entrée à l'autre.
+    # Description de la ligne sélectionnée, si au moins une ligne en a une. On réserve
+    # la place de la plus longue pour que l'aide ne bouge pas d'une ligne à l'autre.
     largeur_texte = max(min(largeur_ecran - 3, 76), 20)
 
     def decouper(description):
         return textwrap.wrap(description, width=largeur_texte)
 
     descriptions = [e.description for e in entrees]
-    if any(descriptions):
-        descriptions.append(DESCRIPTION_QUITTER)
+    descriptions.append(DESCRIPTION_QUITTER if any(descriptions) else "")
+    descriptions += [DESCRIPTION_PARTIE for ligne in infos if ligne.partie]
     hauteur_description = max(len(decouper(d)) for d in descriptions)
     if hauteur_description:
         for i, ligne in enumerate(decouper(descriptions[selection])):
@@ -782,6 +924,34 @@ def _lancer_hors_curses(ecran, entree, journal):
     ecran.clear()
 
 
+def _afficher_partie_curses(ecran, partie, styles):
+    """Écran de détail d'une partie ; une touche ou un clic ramène au menu."""
+    while True:
+        ecran.erase()
+        hauteur, largeur_ecran = ecran.getmaxyx()
+        lignes = details_partie(partie, largeur=min(largeur_ecran - 1, 100))
+        lignes += [("texte", ""), ("aide", "Appuyez sur une touche pour revenir au menu.")]
+        for y, (nom_style, texte) in enumerate(lignes[:hauteur]):
+            try:
+                ecran.addstr(y, 0, texte[: max(largeur_ecran - 1, 0)], styles[nom_style])
+            except curses.error:
+                pass
+        ecran.refresh()
+        try:
+            touche = ecran.get_wch()
+        except KeyboardInterrupt:
+            return
+        except curses.error:
+            continue
+        if touche == curses.KEY_MOUSE:
+            try:
+                curses.getmouse()
+            except curses.error:
+                pass
+        if touche != curses.KEY_RESIZE:
+            return
+
+
 def _boucle_curses(ecran, entrees_config, options):
     try:
         curses.curs_set(0)
@@ -799,10 +969,13 @@ def _boucle_curses(ecran, entrees_config, options):
             | getattr(curses, "BUTTON5_PRESSED", 0)
         )
     entrees = ajouter_fichiers_recents(entrees_config)
-    selection = 0  # de 0 à len(entrees) inclus, la dernière ligne étant « Quitter »
-    nombre_lignes = len(entrees) + 1
-    message = ""
     infos = preparer_infos(options)
+    # Lignes que l'on peut choisir : les entrées, « Quitter » (indice len(entrees)),
+    # puis les parties affichées sous le menu
+    parties = [ligne.partie for ligne in infos if ligne.partie]
+    selection = 0
+    nombre_lignes = len(entrees) + 1 + len(parties)
+    message = ""
 
     while True:
         zones = _dessiner_curses(ecran, entrees, selection, infos, message, styles)
@@ -846,6 +1019,9 @@ def _boucle_curses(ecran, entrees_config, options):
         if touche in ("\n", "\r", curses.KEY_ENTER):
             if selection == len(entrees):
                 return 0
+            if selection > len(entrees):
+                _afficher_partie_curses(ecran, parties[selection - len(entrees) - 1], styles)
+                continue
             entree = entrees[selection]
         elif isinstance(touche, str) and touche.isprintable() and touche != " ":
             if touche.lower() == "q":
@@ -862,10 +1038,11 @@ def _boucle_curses(ecran, entrees_config, options):
         selection = entrees.index(entree)
         _lancer_hors_curses(ecran, entree, options.journal)
         infos = preparer_infos(options)  # les scores ont pu changer
+        parties = [ligne.partie for ligne in infos if ligne.partie]
         # Le programme a pu créer ou modifier des fichiers : on recalcule les « Rouvrir »
         nom_choisi = entree.nom
         entrees = ajouter_fichiers_recents(entrees_config)
-        nombre_lignes = len(entrees) + 1
+        nombre_lignes = len(entrees) + 1 + len(parties)
         noms = [e.nom for e in entrees]
         selection = noms.index(nom_choisi) if nom_choisi in noms else 0
 

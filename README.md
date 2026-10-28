@@ -44,6 +44,8 @@ L'option `--texte` affiche à la place un menu simple, où l'on tape son choix p
 
 Sous le menu sont affichés une rumeur de NetHack tirée au hasard (celles des fortune cookies), les meilleurs scores et un résumé de la dernière partie, lus dans le journal des parties de NetHack (`xlogfile`). Les parties en mode wizard ou exploration ne comptent pas dans les meilleurs scores.
 
+Les lignes des scores et de la dernière partie se choisissent aussi, avec les flèches (après « Quitter ») ou la souris. Entrée affiche alors le détail de la partie : personnage, fin de la partie, dates, temps de jeu, nombre de tours, profondeur atteinte, points de vie, or, conduites respectées et exploits. Dans le menu `--texte`, tapez `s1`, `s2`… pour le détail d'un score, ou `sd` pour la dernière partie.
+
 Si le programme d'une entrée n'existe pas ou n'est pas exécutable, le menu l'indique à côté de son libellé, par exemple `(introuvable)`.
 
 Le menu est affiché en couleurs dans un terminal. Elles sont désactivées automatiquement si la sortie n'est pas un terminal, si la variable d'environnement `NO_COLOR` est définie ou si `TERM=dumb`, ou à la demande avec l'option `--sans-couleur`.
