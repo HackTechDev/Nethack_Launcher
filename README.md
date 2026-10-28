@@ -116,6 +116,27 @@ chemin = ~/nh/install/games/nethack
 arguments = -X
 ```
 
+### Configuration personnelle
+
+Pour adapter le menu sans modifier `config.ini` (suivi par git), créez le fichier `~/.config/nethack_launcher/config.ini` (ou `$XDG_CONFIG_HOME/nethack_launcher/config.ini`). Il est lu après celui du projet :
+
+- une clé redéfinie remplace celle du projet, les autres clés de la section sont conservées ;
+- une nouvelle section ajoute une entrée au menu ;
+- `masquer = oui` retire du menu une entrée du projet.
+
+```ini
+[options]
+theme = cyber
+
+[nethack]
+arguments = -u MonPerso
+
+[monstres]
+masquer = oui
+```
+
+`./nethack_launcher.sh --liste` indique les fichiers de configuration utilisés.
+
 ### Options du lanceur
 
 La section `[options]` est réservée : ce n'est pas une entrée du menu.

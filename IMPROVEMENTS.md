@@ -25,7 +25,7 @@ Pistes pour faire évoluer le lanceur. Les idées marquées ⭐ sont celles à f
 
 ## Configuration
 
-13. **Configuration utilisateur** dans `~/.config/nethack_launcher/config.ini`, avec le `config.ini` du projet comme valeur par défaut. Chacun pourrait alors avoir ses propres chemins sans modifier le fichier suivi par git.
+13. ✅ ~~**Configuration utilisateur**~~ dans `~/.config/nethack_launcher/config.ini`, avec le `config.ini` du projet comme valeur par défaut. Chacun pourrait alors avoir ses propres chemins sans modifier le fichier suivi par git.
 14. **Option `--config fichier.ini`** pour choisir un autre fichier de configuration.
 
 ## Robustesse

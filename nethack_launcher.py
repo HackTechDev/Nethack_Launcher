@@ -19,7 +19,7 @@ try:
 except ImportError:  # module absent (par exemple sous Windows)
     curses = None
 
-FICHIER_CONFIG = Path(__file__).resolve().parent / "config.ini"
+FICHIER_CONFIG = Path(__file__).resolve().parent / "config.ini"  # valeurs par défaut
 SECTION_OPTIONS = "options"  # section de config.ini qui n'est pas une entrée du menu
 
 LOGO = r"""
@@ -184,20 +184,45 @@ def charger_options(config):
     return options
 
 
-def charger_config(fichier: Path):
-    """Lit le fichier de configuration et renvoie (entrées du menu, options)."""
-    if not fichier.is_file():
-        raise ValueError(f"fichier de configuration introuvable : {fichier}")
+def fichier_config_utilisateur():
+    """Configuration personnelle, qui complète ou remplace celle du projet."""
+    base = os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config"
+    return Path(base) / "nethack_launcher" / "config.ini"
+
+
+def fichiers_config():
+    """Fichiers de configuration à lire, du plus général au plus personnel."""
+    fichiers = [FICHIER_CONFIG]
+    if fichier_config_utilisateur().is_file():
+        fichiers.append(fichier_config_utilisateur())
+    return fichiers
+
+
+def charger_config(fichiers):
+    """Lit les fichiers de configuration et renvoie (entrées du menu, options).
+
+    Les fichiers sont lus dans l'ordre : chaque clé d'un fichier remplace la même
+    clé des fichiers précédents, et les nouvelles sections s'ajoutent au menu.
+    """
+    for fichier in fichiers:
+        if not fichier.is_file():
+            raise ValueError(f"fichier de configuration introuvable : {fichier}")
 
     config = configparser.ConfigParser(interpolation=None)
     config.BOOLEAN_STATES = {**config.BOOLEAN_STATES, "oui": True, "non": False}
-    config.read(fichier, encoding="utf-8")
+    config.read(fichiers, encoding="utf-8")
 
     entrees = []
     touches = {}
     for section in config.sections():
         if section == SECTION_OPTIONS:
             continue
+        try:
+            # « masquer = oui » retire du menu une entrée définie par un autre fichier
+            if config[section].getboolean("masquer", False):
+                continue
+        except ValueError:
+            raise ValueError(f"section [{section}] : masquer doit valoir oui ou non")
         if "chemin" not in config[section]:
             raise ValueError(f"section [{section}] : clé « chemin » manquante")
         chemin = chemin_config(config[section]["chemin"])
@@ -229,7 +254,7 @@ def charger_config(fichier: Path):
         )
 
     if not entrees:
-        raise ValueError(f"aucune entrée définie dans {fichier}")
+        raise ValueError("aucune entrée définie")
     # Les entrées d'un même groupe sont rassemblées, dans l'ordre d'apparition des groupes
     ordre_groupes = {}
     for entree in entrees:
@@ -754,14 +779,16 @@ def main(argv=None):
     if args.sans_couleur:
         couleurs_autorisees = False
 
+    fichiers = fichiers_config()
     try:
-        entrees, options = charger_config(FICHIER_CONFIG)
+        entrees, options = charger_config(fichiers)
     except (ValueError, configparser.Error) as e:
-        erreur(f"Erreur de configuration : {e}")
+        erreur(f"Erreur de configuration ({', '.join(map(str, fichiers))}) : {e}")
         return 1
     theme = THEMES[args.theme or options.theme]
 
     if args.liste:
+        print(f"Configuration : {', '.join(map(str, fichiers))}\n")
         for i, entree in enumerate(entrees, start=1):
             probleme = entree.probleme()
             suffixe = f"  ({probleme})" if probleme else ""
