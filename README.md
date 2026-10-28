@@ -75,22 +75,26 @@ Les chemins des programmes sont définis dans `config.ini`, à côté du script.
 libelle = Jouer à NetHack
 chemin = ~/nh/install/games/nethack
 touche = n
+groupe = Jeu
 
 [editeur]
 libelle = Éditeur de carte
 chemin = ~/JEUX/NETHACK/NetHack_MapEditor/nhmapedit.sh
 touche = e
+groupe = Outils
 
 [monstres]
 libelle = Éditeur de monstres
 chemin = ~/JEUX/NETHACK/NetHack_MonsterEditor/nhmonedit.sh
 touche = m
+groupe = Outils
 ```
 
 - `libelle` : texte affiché dans le menu (facultatif, le nom de la section est utilisé par défaut)
 - `chemin` : programme à lancer ; `~` et les variables d'environnement (`$HOME`…) sont acceptés
 - `arguments` : options passées au programme (facultatif). Les guillemets permettent d'inclure des espaces : `arguments = -u "Mon Perso" -p Valkyrie`
 - `touche` : raccourci clavier pour choisir l'entrée dans le menu (facultatif). Une seule lettre, différente pour chaque entrée ; `q` est réservée pour quitter
+- `groupe` : titre du groupe où ranger l'entrée (facultatif). Le menu affiche un titre pour chaque groupe et rassemble les entrées d'un même groupe, dans l'ordre où les groupes apparaissent dans le fichier
 
 Pour ajouter une entrée au menu, il suffit d'ajouter une nouvelle section. Par exemple, pour lancer directement un personnage précis ou le mode exploration :
 

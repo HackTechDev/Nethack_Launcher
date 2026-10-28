@@ -68,6 +68,7 @@ class Entree:
     chemin: Path
     arguments: list = field(default_factory=list)
     touche: str = ""  # raccourci clavier (une lettre), facultatif
+    groupe: str = ""  # titre du groupe sous lequel l'entrée est rangée, facultatif
 
     def probleme(self):
         """Renvoie la raison pour laquelle le programme ne peut pas être lancé, sinon None."""
@@ -147,12 +148,16 @@ def charger_config(fichier: Path):
                     f" par [{touches[touche]}]"
                 )
             touches[touche] = section
-        entrees.append(
-            Entree(section, libelle, chemin, arguments, touche)
-        )
+        groupe = config[section].get("groupe", "").strip()
+        entrees.append(Entree(section, libelle, chemin, arguments, touche, groupe))
 
     if not entrees:
         raise ValueError(f"aucune entrée définie dans {fichier}")
+    # Les entrées d'un même groupe sont rassemblées, dans l'ordre d'apparition des groupes
+    ordre_groupes = {}
+    for entree in entrees:
+        ordre_groupes.setdefault(entree.groupe, len(ordre_groupes))
+    entrees.sort(key=lambda e: ordre_groupes[e.groupe])
     return entrees, charger_options(config)
 
 
@@ -298,6 +303,31 @@ def trouver_entree(entrees, choix: str):
     return None
 
 
+def structure_menu(entrees):
+    """Renvoie les lignes du menu, dans l'ordre d'affichage.
+
+    Chaque ligne est un couple : ("groupe", titre) pour un titre de groupe,
+    ("espace", "") pour une ligne vide séparant des entrées sans groupe,
+    ou ("entree", indice) pour une entrée.
+    """
+    lignes = []
+    precedent = ""
+    for i, entree in enumerate(entrees):
+        if entree.groupe != precedent:
+            lignes.append(("groupe", entree.groupe) if entree.groupe else ("espace", ""))
+            precedent = entree.groupe
+        lignes.append(("entree", i))
+    if precedent:
+        lignes.append(("espace", ""))  # sépare le dernier groupe de « Quitter »
+    return lignes
+
+
+def titre_groupe(groupe: str):
+    """Ligne de titre d'un groupe, ex. « ── Outils ───────── », de largeur LARGEUR."""
+    debut = f"── {groupe} "
+    return debut + "─" * max(LARGEUR - len(debut), 0)
+
+
 def effacer_ecran():
     os.system("clear" if os.name != "nt" else "cls")
 
@@ -309,7 +339,14 @@ def afficher_menu(entrees, infos=()):
     print(style("LANCEUR".center(LARGEUR).rstrip(), GRAS))
     print(separateur)
     largeur = len(str(len(entrees)))
-    for i, entree in enumerate(entrees, start=1):
+    for genre, valeur in structure_menu(entrees):
+        if genre == "groupe":
+            print(style(titre_groupe(valeur), BLEU, GRAS))
+            continue
+        if genre == "espace":
+            print()
+            continue
+        i, entree = valeur + 1, entrees[valeur]
         numero = style(f"{i:>{largeur}}", CYAN)
         touche = style(f"[{entree.touche}]", JAUNE, GRAS) if entree.touche else "   "
         probleme = entree.probleme()
@@ -391,6 +428,7 @@ def _styles_curses():
         "discret": curses.A_DIM,
         "rumeur": curses.A_NORMAL,
         "selection": curses.A_REVERSE | curses.A_BOLD,
+        "groupe": curses.A_BOLD,
     }
     if not (couleurs_autorisees and "NO_COLOR" not in os.environ and curses.has_colors()):
         return styles
@@ -414,6 +452,7 @@ def _styles_curses():
         touche=jaune | curses.A_BOLD,
         erreur=rouge | curses.A_BOLD,
         rumeur=cyan,
+        groupe=bleu | curses.A_BOLD,
     )
     return styles
 
@@ -445,7 +484,13 @@ def _dessiner_curses(ecran, entrees, selection, infos, message, styles):
     y += 3
 
     largeur = len(str(len(entrees)))
-    for i, entree in enumerate(entrees):
+    for genre, valeur in structure_menu(entrees):
+        if genre == "groupe":
+            ecrire(y, 0, titre_groupe(valeur), styles["groupe"])
+        if genre != "entree":
+            y += 1
+            continue
+        i, entree = valeur, entrees[valeur]
         probleme = entree.probleme()
         numero = f"{i + 1:>{largeur}}"
         touche = f"[{entree.touche}]" if entree.touche else "   "
