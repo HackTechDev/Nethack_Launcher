@@ -4,6 +4,7 @@ Petit lanceur en Python qui affiche un menu en terminal pour démarrer :
 
 1. **NetHack** — `~/nh/install/games/nethack`
 2. **L'éditeur de carte** — `~/JEUX/NETHACK/NetHack_MapEditor/nhmapedit.sh`
+3. **L'éditeur de monstres** — `~/JEUX/NETHACK/NetHack_MonsterEditor/nhmonedit.sh`
 
 ![Capture d'écran du menu du lanceur](docs/capture.png)
 
@@ -33,7 +34,7 @@ ou, depuis n'importe quel dossier (y compris via un lien symbolique, par exemple
 Le menu s'affiche en plein écran :
 
 - `↑` / `↓` pour choisir une entrée, `Entrée` pour la lancer (la ligne « Quitter » est aussi accessible aux flèches) ;
-- ou directement le numéro de l'entrée ou sa touche (`n` pour NetHack, `e` pour l'éditeur) ;
+- ou directement le numéro de l'entrée ou sa touche (`n` pour NetHack, `e` pour l'éditeur de carte, `m` pour l'éditeur de monstres) ;
 - `q` ou `Échap` pour quitter.
 
 Quand le programme lancé se termine, appuyez sur Entrée pour revenir au menu.
@@ -79,6 +80,11 @@ touche = n
 libelle = Éditeur de carte
 chemin = ~/JEUX/NETHACK/NetHack_MapEditor/nhmapedit.sh
 touche = e
+
+[monstres]
+libelle = Éditeur de monstres
+chemin = ~/JEUX/NETHACK/NetHack_MonsterEditor/nhmonedit.sh
+touche = m
 ```
 
 - `libelle` : texte affiché dans le menu (facultatif, le nom de la section est utilisé par défaut)
