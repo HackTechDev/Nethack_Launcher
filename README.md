@@ -146,6 +146,19 @@ L'option `--config` (ou `-c`) utilise le fichier indiqué **à la place** de `co
 ./nethack_launcher.sh -c config.ini -c ~/essais.ini
 ```
 
+### Journal des lancements
+
+Chaque lancement est noté dans un journal, avec sa date, sa durée et le code de sortie du programme. Par défaut, il se trouve dans `~/.local/state/nethack_launcher/journal.tsv` (ou `$XDG_STATE_HOME/nethack_launcher/journal.tsv`).
+
+`./nethack_launcher.sh --journal` (ou `-j`) affiche le temps passé dans chaque programme et les derniers lancements :
+
+```
+Programme            Lancements  Temps total  Dernier lancement
+Jouer à NetHack              12   5 h 32 min  28/10/2026 20:15
+Éditeur de carte              4       47 min  27/10/2026 18:02
+Total                        16   6 h 19 min
+```
+
 ### Options du lanceur
 
 La section `[options]` est réservée : ce n'est pas une entrée du menu.
@@ -157,6 +170,7 @@ nombre_scores = 3
 rumeur = oui
 theme = classique
 souris = oui
+journal = ~/.local/state/nethack_launcher/journal.tsv
 ```
 
 - `dossier_nethack` : dossier de données de NetHack (le `HACKDIR` défini dans le script `nethack`), où se trouve le fichier `xlogfile`. Laissez la valeur vide pour ne pas afficher les scores
@@ -170,6 +184,7 @@ souris = oui
 
   L'option `--theme` permet d'essayer un thème sans modifier `config.ini`, par exemple `./nethack_launcher.sh --theme cyber`
 - `souris` : clic, double-clic et molette dans le menu plein écran (`oui` ou `non`). Avec `non`, le terminal garde la sélection de texte habituelle à la souris
+- `journal` : fichier du journal des lancements. Laissez la valeur vide pour ne pas tenir de journal
 
 ## Licence
 

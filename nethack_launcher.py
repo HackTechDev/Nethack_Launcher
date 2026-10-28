@@ -10,6 +10,7 @@ import shlex
 import subprocess
 import sys
 import textwrap
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -140,6 +141,11 @@ class Entree:
         return None
 
 
+def fichier_journal_par_defaut():
+    base = os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state"
+    return Path(base) / "nethack_launcher" / "journal.tsv"
+
+
 @dataclass
 class Options:
     dossier_nethack: Path = None  # dossier de données de NetHack (HACKDIR)
@@ -148,6 +154,7 @@ class Options:
     fichier_rumeurs: Path = None  # par défaut : rumors ou rumors.* du dossier NetHack
     theme: str = THEME_PAR_DEFAUT
     souris: bool = True  # clic et molette dans le menu plein écran
+    journal: Path = field(default_factory=fichier_journal_par_defaut)  # None : pas de journal
 
 
 def chemin_config(valeur: str):
@@ -175,6 +182,9 @@ def charger_options(config):
         options.souris = section.getboolean("souris", options.souris)
     except ValueError:
         raise ValueError(f"section [{SECTION_OPTIONS}] : souris doit valoir oui ou non")
+    if "journal" in section:
+        valeur = section["journal"].strip()
+        options.journal = chemin_config(valeur) if valeur else None
     options.theme = section.get("theme", options.theme).strip().lower()
     if options.theme not in THEMES:
         raise ValueError(
@@ -466,25 +476,105 @@ def afficher_menu(entrees, infos=()):
         print()
 
 
-def lancer(entree: Entree, supplementaires=()):
+def ecrire_journal(journal: Path, entree: Entree, debut: datetime, duree: float, code: int):
+    """Ajoute un lancement au journal : début, section, libellé, durée en secondes, code."""
+    champs = [
+        debut.isoformat(timespec="seconds"),
+        entree.nom,
+        entree.libelle,
+        str(round(duree)),
+        str(code),
+    ]
+    try:
+        journal.parent.mkdir(parents=True, exist_ok=True)
+        with journal.open("a", encoding="utf-8") as f:
+            f.write("\t".join(c.replace("\t", " ") for c in champs) + "\n")
+    except OSError as e:
+        erreur(f"Impossible d'écrire dans le journal {journal} : {e}")
+
+
+def lancer(entree: Entree, supplementaires=(), journal: Path = None):
     """Lance le programme de l'entrée et renvoie son code de sortie.
 
     Les arguments supplémentaires sont ajoutés après ceux de la configuration.
+    Si un journal est donné, le lancement y est noté avec sa durée.
     """
     chemin = entree.chemin
     probleme = entree.probleme()
     if probleme:
         erreur(f"Erreur : programme {probleme} : {chemin}")
         return 1
+    debut, chrono = datetime.now(), time.monotonic()
     try:
         # Exécution depuis le dossier du programme (utile pour les scripts relatifs)
         commande = [str(chemin), *entree.arguments, *supplementaires]
-        return subprocess.run(commande, cwd=chemin.parent).returncode
+        code = subprocess.run(commande, cwd=chemin.parent).returncode
     except KeyboardInterrupt:
-        return 130
+        code = 130
     except OSError as e:
         erreur(f"Erreur au lancement : {e}")
         return 1
+    if journal is not None:
+        ecrire_journal(journal, entree, debut, time.monotonic() - chrono, code)
+    return code
+
+
+def formater_duree(secondes: float):
+    secondes = round(secondes)
+    if secondes < 60:
+        return f"{secondes} s"
+    heures, minutes = divmod(secondes // 60, 60)
+    return f"{heures} h {minutes:02d} min" if heures else f"{minutes} min"
+
+
+def afficher_journal(journal: Path, nombre_derniers=10):
+    """Affiche le temps passé dans chaque programme et les derniers lancements."""
+    try:
+        lignes = journal.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        print(f"Aucun lancement enregistré pour l'instant ({journal}).")
+        return 0
+    except OSError as e:
+        erreur(f"Impossible de lire le journal {journal} : {e}")
+        return 1
+
+    lancements = []
+    for ligne in lignes:
+        champs = ligne.split("\t")
+        try:
+            debut, nom, libelle = datetime.fromisoformat(champs[0]), champs[1], champs[2]
+            duree, code = int(champs[3]), int(champs[4])
+        except (IndexError, ValueError):
+            continue
+        lancements.append((debut, nom, libelle, duree, code))
+
+    print(f"Journal : {journal}\n")
+    if not lancements:
+        print("Aucun lancement enregistré pour l'instant.")
+        return 0
+
+    bilan = {}  # section -> [libellé le plus récent, nombre, durée totale, dernier début]
+    for debut, nom, libelle, duree, _ in lancements:
+        ligne = bilan.setdefault(nom, [libelle, 0, 0, debut])
+        ligne[0], ligne[3] = libelle, debut
+        ligne[1] += 1
+        ligne[2] += duree
+
+    largeur = max(len(l[0]) for l in bilan.values())
+    print(style(f"{'Programme':<{largeur}}  Lancements  Temps total  Dernier lancement", "titre_infos"))
+    for libelle, nombre, total, dernier in sorted(bilan.values(), key=lambda l: -l[2]):
+        print(
+            f"{libelle:<{largeur}}  {nombre:>10}  {formater_duree(total):>11}"
+            f"  {dernier:%d/%m/%Y %H:%M}"
+        )
+    total = sum(l[2] for l in bilan.values())
+    print(f"{'Total':<{largeur}}  {len(lancements):>10}  {formater_duree(total):>11}")
+
+    print(style(f"\n{min(nombre_derniers, len(lancements))} derniers lancements", "titre_infos"))
+    for debut, _, libelle, duree, code in lancements[-nombre_derniers:][::-1]:
+        fin = "" if code == 0 else style(f"  (code {code})", "erreur")
+        print(f"{debut:%d/%m/%Y %H:%M}  {libelle:<{largeur}}  {formater_duree(duree):>11}{fin}")
+    return 0
 
 
 def menu_texte(entrees, options):
@@ -502,7 +592,7 @@ def menu_texte(entrees, options):
             return 0
         entree = trouver_entree(entrees, choix)
         if entree:
-            lancer(entree)
+            lancer(entree, journal=options.journal)
             input("\nAppuyez sur Entrée pour revenir au menu...")
         else:
             input(style("Choix invalide.", "erreur") + " Appuyez sur Entrée pour continuer...")
@@ -637,12 +727,12 @@ def _dessiner_curses(ecran, entrees, selection, infos, message, styles):
     return zones
 
 
-def _lancer_hors_curses(ecran, entree):
+def _lancer_hors_curses(ecran, entree, journal):
     """Quitte temporairement le mode curses le temps d'exécuter le programme."""
     curses.def_prog_mode()
     curses.endwin()
     effacer_ecran()
-    lancer(entree)
+    lancer(entree, journal=journal)
     try:
         input("\nAppuyez sur Entrée pour revenir au menu...")
     except (EOFError, KeyboardInterrupt):
@@ -728,7 +818,7 @@ def _boucle_curses(ecran, entrees, options):
             continue  # redimensionnement ou touche spéciale ignorée
 
         selection = entrees.index(entree)
-        _lancer_hors_curses(ecran, entree)
+        _lancer_hors_curses(ecran, entree, options.journal)
         infos = preparer_infos(options)  # les scores ont pu changer
 
 
@@ -756,6 +846,12 @@ def analyser_arguments(argv):
     )
     parser.add_argument(
         "-l", "--liste", action="store_true", help="affiche les entrées disponibles"
+    )
+    parser.add_argument(
+        "-j",
+        "--journal",
+        action="store_true",
+        help="affiche le temps passé dans chaque programme et les derniers lancements",
     )
     parser.add_argument(
         "--sans-couleur", action="store_true", help="désactive les couleurs"
@@ -796,6 +892,12 @@ def main(argv=None):
         return 1
     theme = THEMES[args.theme or options.theme]
 
+    if args.journal:
+        if options.journal is None:
+            print("Le journal est désactivé (option « journal » vide dans [options]).")
+            return 0
+        return afficher_journal(options.journal)
+
     if args.liste:
         print(f"Configuration : {', '.join(map(str, fichiers))}\n")
         for i, entree in enumerate(entrees, start=1):
@@ -814,7 +916,7 @@ def main(argv=None):
             erreur(f"Erreur : entrée inconnue : {args.entree}")
             print("Utilisez --liste pour voir les entrées disponibles.", file=sys.stderr)
             return 2
-        return lancer(entree, args.arguments)
+        return lancer(entree, args.arguments, options.journal)
 
     if args.texte or curses is None or not terminal_interactif():
         return menu_texte(entrees, options)

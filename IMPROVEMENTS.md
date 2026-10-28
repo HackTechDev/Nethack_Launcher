@@ -30,7 +30,7 @@ Pistes pour faire évoluer le lanceur. Les idées marquées ⭐ sont celles à f
 
 ## Robustesse
 
-15. **Journal des lancements** : garder la date, l'entrée, la durée et le code de sortie dans un fichier, pour voir combien de temps on joue.
+15. ✅ ~~**Journal des lancements**~~ : garder la date, l'entrée, la durée et le code de sortie dans un fichier, pour voir combien de temps on joue.
 16. **Lancement de NetHack bloqué si une partie est déjà en cours** (fichier de verrou présent), avec un avertissement clair.
 
 ## Qualité du projet
