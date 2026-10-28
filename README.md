@@ -85,6 +85,7 @@ chemin = ~/JEUX/NETHACK/NetHack_MapEditor/nhmapedit.sh
 touche = e
 groupe = Outils
 description = Crée et modifie les cartes des niveaux spéciaux (scripts Lua).
+fichiers_recents = ~/JEUX/NETHACK/NetHack_MapEditor/essais/*.lua ~/nh/install/games/lib/nethackdir/*.lua
 
 [monstres]
 libelle = Éditeur de monstres
@@ -92,6 +93,7 @@ chemin = ~/JEUX/NETHACK/NetHack_MonsterEditor/nhmonedit.sh
 touche = m
 groupe = Outils
 description = Crée les robots et mechas de la version cyberpunk et les ajoute au jeu.
+fichiers_recents = ~/JEUX/NETHACK/NetHack_MonsterEditor/*.json
 ```
 
 - `libelle` : texte affiché dans le menu (facultatif, le nom de la section est utilisé par défaut)
@@ -100,6 +102,7 @@ description = Crée les robots et mechas de la version cyberpunk et les ajoute a
 - `touche` : raccourci clavier pour choisir l'entrée dans le menu (facultatif). Une seule lettre, différente pour chaque entrée ; `q` est réservée pour quitter
 - `groupe` : titre du groupe où ranger l'entrée (facultatif). Le menu affiche un titre pour chaque groupe et rassemble les entrées d'un même groupe, dans l'ordre où les groupes apparaissent dans le fichier
 - `description` : texte affiché en bas du menu plein écran quand l'entrée est sélectionnée (facultatif). Il est aussi affiché par `--liste`
+- `fichiers_recents` : motifs de fichiers séparés par des espaces, par exemple `~/cartes/*.lua` ou `~/cartes/**/*.lua` pour inclure les sous-dossiers (facultatif). Le menu ajoute sous l'entrée une ligne « ↳ Rouvrir *fichier* », qui lance le programme sur le fichier modifié le plus récemment. Cette ligne est mise à jour à chaque retour au menu, et peut être lancée directement avec `./nethack_launcher.sh editeur-recent`
 
 Pour ajouter une entrée au menu, il suffit d'ajouter une nouvelle section. Par exemple, pour lancer directement un personnage précis ou le mode exploration :
 

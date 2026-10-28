@@ -12,7 +12,7 @@ Pistes pour faire évoluer le lanceur. Les idées marquées ⭐ sont celles à f
 
 ## Pour les éditeurs
 
-6. **Éditeurs liés aux fichiers récents** : proposer de rouvrir dans l'éditeur de carte ou de monstres le dernier fichier modifié, par exemple `monstres.json` ou un `.lua`.
+6. ✅ ~~**Éditeurs liés aux fichiers récents**~~ : proposer de rouvrir dans l'éditeur de carte ou de monstres le dernier fichier modifié, par exemple `monstres.json` ou un `.lua`.
 7. ⭐ **Variables d'environnement par entrée** : une clé `env` dans `config.ini`, par exemple `NHMONEDIT_SRC=~/NetHack-5.0.0`, pour régler l'éditeur de monstres sans modifier son script.
 
 ## Confort du menu

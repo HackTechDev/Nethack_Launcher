@@ -3,6 +3,7 @@
 
 import argparse
 import configparser
+import glob
 import os
 import random
 import re
@@ -131,6 +132,7 @@ class Entree:
     touche: str = ""  # raccourci clavier (une lettre), facultatif
     groupe: str = ""  # titre du groupe sous lequel l'entrée est rangée, facultatif
     description: str = ""  # affichée en bas du menu plein écran quand l'entrée est choisie
+    fichiers_recents: list = field(default_factory=list)  # motifs, ex. ~/cartes/*.lua
 
     def probleme(self):
         """Renvoie la raison pour laquelle le programme ne peut pas être lancé, sinon None."""
@@ -259,8 +261,15 @@ def charger_config(fichiers):
         groupe = config[section].get("groupe", "").strip()
         # Une description sur plusieurs lignes dans config.ini est remise sur une seule
         description = " ".join(config[section].get("description", "").split())
+        try:
+            motifs = [
+                str(chemin_config(motif))
+                for motif in shlex.split(config[section].get("fichiers_recents", ""))
+            ]
+        except ValueError as e:
+            raise ValueError(f"section [{section}] : fichiers_recents invalides ({e})")
         entrees.append(
-            Entree(section, libelle, chemin, arguments, touche, groupe, description)
+            Entree(section, libelle, chemin, arguments, touche, groupe, description, motifs)
         )
 
     if not entrees:
@@ -397,6 +406,37 @@ def preparer_infos(options: Options):
             f" {derniere.mort} ({formater_date(derniere.date)}{mode})",
         ))
     return infos
+
+
+def fichier_le_plus_recent(motifs):
+    """Renvoie le fichier modifié le plus récemment parmi ceux des motifs, sinon None."""
+    fichiers = [
+        Path(f) for motif in motifs for f in glob.glob(motif, recursive=True)
+        if Path(f).is_file()
+    ]
+    return max(fichiers, key=lambda f: f.stat().st_mtime, default=None)
+
+
+def ajouter_fichiers_recents(entrees):
+    """Ajoute après chaque entrée qui a des fichiers_recents une entrée « Rouvrir »,
+    qui lance le même programme sur le dernier fichier modifié."""
+    resultat = []
+    for entree in entrees:
+        resultat.append(entree)
+        fichier = fichier_le_plus_recent(entree.fichiers_recents)
+        if fichier is None:
+            continue
+        modifie = datetime.fromtimestamp(fichier.stat().st_mtime)
+        resultat.append(Entree(
+            nom=f"{entree.nom}-recent",
+            libelle=f"↳ Rouvrir {fichier.name}",
+            chemin=entree.chemin,
+            arguments=[*entree.arguments, str(fichier)],
+            groupe=entree.groupe,
+            description=f"Ouvre {fichier} dans « {entree.libelle} »"
+            f" (modifié le {modifie:%d/%m/%Y à %H:%M}).",
+        ))
+    return resultat
 
 
 def trouver_entree(entrees, choix: str):
@@ -577,9 +617,10 @@ def afficher_journal(journal: Path, nombre_derniers=10):
     return 0
 
 
-def menu_texte(entrees, options):
+def menu_texte(entrees_config, options):
     """Menu simple : on tape le numéro ou la touche de l'entrée puis Entrée."""
     while True:
+        entrees = ajouter_fichiers_recents(entrees_config)  # les fichiers ont pu changer
         effacer_ecran()
         afficher_menu(entrees, preparer_infos(options))
         try:
@@ -741,7 +782,7 @@ def _lancer_hors_curses(ecran, entree, journal):
     ecran.clear()
 
 
-def _boucle_curses(ecran, entrees, options):
+def _boucle_curses(ecran, entrees_config, options):
     try:
         curses.curs_set(0)
     except curses.error:
@@ -757,6 +798,7 @@ def _boucle_curses(ecran, entrees, options):
             | curses.BUTTON4_PRESSED
             | getattr(curses, "BUTTON5_PRESSED", 0)
         )
+    entrees = ajouter_fichiers_recents(entrees_config)
     selection = 0  # de 0 à len(entrees) inclus, la dernière ligne étant « Quitter »
     nombre_lignes = len(entrees) + 1
     message = ""
@@ -820,6 +862,12 @@ def _boucle_curses(ecran, entrees, options):
         selection = entrees.index(entree)
         _lancer_hors_curses(ecran, entree, options.journal)
         infos = preparer_infos(options)  # les scores ont pu changer
+        # Le programme a pu créer ou modifier des fichiers : on recalcule les « Rouvrir »
+        nom_choisi = entree.nom
+        entrees = ajouter_fichiers_recents(entrees_config)
+        nombre_lignes = len(entrees) + 1
+        noms = [e.nom for e in entrees]
+        selection = noms.index(nom_choisi) if nom_choisi in noms else 0
 
 
 def terminal_interactif():
@@ -891,6 +939,8 @@ def main(argv=None):
         erreur(f"Erreur de configuration ({', '.join(map(str, fichiers))}) : {e}")
         return 1
     theme = THEMES[args.theme or options.theme]
+    entrees_config = entrees
+    entrees = ajouter_fichiers_recents(entrees)
 
     if args.journal:
         if options.journal is None:
@@ -919,12 +969,12 @@ def main(argv=None):
         return lancer(entree, args.arguments, options.journal)
 
     if args.texte or curses is None or not terminal_interactif():
-        return menu_texte(entrees, options)
+        return menu_texte(entrees_config, options)
     try:
-        return menu_curses(entrees, options)
+        return menu_curses(entrees_config, options)
     except curses.error as e:
         erreur(f"Menu plein écran indisponible ({e}), passage au menu texte.")
-        return menu_texte(entrees, options)
+        return menu_texte(entrees_config, options)
 
 
 if __name__ == "__main__":
