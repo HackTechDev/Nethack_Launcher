@@ -124,12 +124,19 @@ La section `[options]` est réservée : ce n'est pas une entrée du menu.
 dossier_nethack = ~/nh/install/games/lib/nethackdir
 nombre_scores = 3
 rumeur = oui
+theme = classique
 ```
 
 - `dossier_nethack` : dossier de données de NetHack (le `HACKDIR` défini dans le script `nethack`), où se trouve le fichier `xlogfile`. Laissez la valeur vide pour ne pas afficher les scores
 - `nombre_scores` : nombre de meilleurs scores affichés (`0` pour aucun)
 - `rumeur` : affiche une rumeur au hasard (`oui` ou `non`)
 - `fichier_rumeurs` : fichier des rumeurs à utiliser (facultatif). Par défaut, le lanceur prend `rumors`, ou à défaut `rumors.<langue>` (par exemple `rumors.fr`), dans `dossier_nethack`
+- `theme` : couleurs du menu, parmi :
+  - `classique` : logo jaune, séparateurs bleus (par défaut)
+  - `cyber` : néons magenta, cyan et vert, assortis à la version cyberpunk de NetHack
+  - `sobre` : sans couleur, uniquement du gras et du texte atténué
+
+  L'option `--theme` permet d'essayer un thème sans modifier `config.ini`, par exemple `./nethack_launcher.sh --theme cyber`
 
 ## Licence
 

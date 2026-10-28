@@ -33,12 +33,65 @@ LOGO = r"""
 LARGEUR = 40
 DESCRIPTION_QUITTER = "Quitter le lanceur."
 
-# Codes ANSI de mise en forme
-GRAS, PALE = "1", "2"
-ROUGE, VERT, JAUNE, BLEU, CYAN = "31", "32", "33", "34", "36"
+# Couleurs du terminal, dans l'ordre des codes ANSI (30 + indice) et de curses
+COULEURS = ["noir", "rouge", "vert", "jaune", "bleu", "magenta", "cyan", "blanc"]
+ATTRIBUTS_ANSI = {"gras": "1", "pale": "2"}
 
+# Mise en forme de chaque élément de l'affichage : (couleur ou None, attributs...).
+# Un thème peut redéfinir n'importe lequel de ces éléments.
+STYLES_COMMUNS = {
+    "titre": (None, "gras"),
+    "titre_infos": (None, "gras"),
+    "invite": (None, "gras"),
+    "texte": (None,),
+    "discret": (None, "pale"),
+    "aide": (None, "pale"),
+    "indisponible": (None, "pale"),
+}
+THEMES = {
+    "classique": {
+        "logo": ("jaune", "gras"),
+        "separateur": ("bleu",),
+        "groupe": ("bleu", "gras"),
+        "numero": ("cyan",),
+        "touche": ("jaune", "gras"),
+        "erreur": ("rouge", "gras"),
+        "rumeur": ("cyan",),
+        "description": ("cyan",),
+    },
+    "cyber": {
+        "logo": ("magenta", "gras"),
+        "titre": ("cyan", "gras"),
+        "separateur": ("cyan",),
+        "groupe": ("magenta", "gras"),
+        "numero": ("vert",),
+        "touche": ("cyan", "gras"),
+        "erreur": ("rouge", "gras"),
+        "rumeur": ("vert",),
+        "description": ("magenta",),
+    },
+    "sobre": {
+        "logo": (None, "gras"),
+        "separateur": (None,),
+        "groupe": (None, "gras"),
+        "numero": (None,),
+        "touche": (None, "gras"),
+        "erreur": (None, "gras"),
+        "rumeur": (None,),
+        "description": (None,),
+    },
+}
+THEME_PAR_DEFAUT = "classique"
+
+# Thème utilisé : option « theme » de config.ini, ou --theme
+theme = THEMES[THEME_PAR_DEFAUT]
 # Peut être forcé à False par l'option --sans-couleur
 couleurs_autorisees = True
+
+
+def styles_du_theme():
+    """Renvoie la mise en forme de chaque élément pour le thème utilisé."""
+    return {**STYLES_COMMUNS, **theme}
 
 
 def couleurs_actives(flux=sys.stdout):
@@ -51,15 +104,21 @@ def couleurs_actives(flux=sys.stdout):
     )
 
 
-def style(texte, *codes, flux=sys.stdout):
-    """Entoure le texte des codes ANSI donnés, si les couleurs sont actives."""
-    if not codes or not couleurs_actives(flux):
+def style(texte, element, flux=sys.stdout):
+    """Met en forme le texte selon l'élément du thème, si les couleurs sont actives."""
+    if not couleurs_actives(flux):
+        return texte
+    couleur, *attributs = styles_du_theme().get(element, (None,))
+    codes = [ATTRIBUTS_ANSI[a] for a in attributs]
+    if couleur:
+        codes.insert(0, str(30 + COULEURS.index(couleur)))
+    if not codes:
         return texte
     return f"\033[{';'.join(codes)}m{texte}\033[0m"
 
 
 def erreur(message):
-    print(style(message, ROUGE, flux=sys.stderr), file=sys.stderr)
+    print(style(message, "erreur", flux=sys.stderr), file=sys.stderr)
 
 
 @dataclass
@@ -87,6 +146,7 @@ class Options:
     nombre_scores: int = 3
     rumeur: bool = True
     fichier_rumeurs: Path = None  # par défaut : rumors ou rumors.* du dossier NetHack
+    theme: str = THEME_PAR_DEFAUT
 
 
 def chemin_config(valeur: str):
@@ -110,6 +170,12 @@ def charger_options(config):
         raise ValueError(f"section [{SECTION_OPTIONS}] : rumeur doit valoir oui ou non")
     if section.get("fichier_rumeurs", "").strip():
         options.fichier_rumeurs = chemin_config(section["fichier_rumeurs"].strip())
+    options.theme = section.get("theme", options.theme).strip().lower()
+    if options.theme not in THEMES:
+        raise ValueError(
+            f"section [{SECTION_OPTIONS}] : thème inconnu « {options.theme} »"
+            f" (thèmes disponibles : {', '.join(THEMES)})"
+        )
     return options
 
 
@@ -339,35 +405,34 @@ def effacer_ecran():
 
 
 def afficher_menu(entrees, infos=()):
-    separateur = style("=" * LARGEUR, BLEU)
-    print(style(LOGO, JAUNE, GRAS))
+    separateur = style("=" * LARGEUR, "separateur")
+    print(style(LOGO, "logo"))
     print(separateur)
-    print(style("LANCEUR".center(LARGEUR).rstrip(), GRAS))
+    print(style("LANCEUR".center(LARGEUR).rstrip(), "titre"))
     print(separateur)
     largeur = len(str(len(entrees)))
     for genre, valeur in structure_menu(entrees):
         if genre == "groupe":
-            print(style(titre_groupe(valeur), BLEU, GRAS))
+            print(style(titre_groupe(valeur), "groupe"))
             continue
         if genre == "espace":
             print()
             continue
         i, entree = valeur + 1, entrees[valeur]
-        numero = style(f"{i:>{largeur}}", CYAN)
-        touche = style(f"[{entree.touche}]", JAUNE, GRAS) if entree.touche else "   "
+        numero = style(f"{i:>{largeur}}", "numero")
+        touche = style(f"[{entree.touche}]", "touche") if entree.touche else "   "
         probleme = entree.probleme()
         if probleme:
-            libelle = style(entree.libelle, PALE) + "  " + style(f"({probleme})", ROUGE)
+            libelle = style(entree.libelle, "indisponible") + "  " + style(f"({probleme})", "erreur")
         else:
             libelle = entree.libelle
         print(f"  {numero} {touche}  {libelle}")
-    print(f"  {'':>{largeur}} {style('[q]', JAUNE, GRAS)}  Quitter")
+    print(f"  {'':>{largeur}} {style('[q]', 'touche')}  Quitter")
     print(separateur)
     if infos:
-        styles = {"titre": (GRAS,), "texte": (), "discret": (PALE,), "rumeur": (CYAN,)}
         print()
         for nom_style, texte in infos:
-            print(style(texte, *styles[nom_style]))
+            print(style(texte, "titre_infos" if nom_style == "titre" else nom_style))
         print()
 
 
@@ -398,7 +463,7 @@ def menu_texte(entrees, options):
         effacer_ecran()
         afficher_menu(entrees, preparer_infos(options))
         try:
-            choix = input(style("Votre choix : ", GRAS)).strip().lower()
+            choix = input(style("Votre choix : ", "invite")).strip().lower()
         except (EOFError, KeyboardInterrupt):
             print()
             return 0
@@ -410,7 +475,7 @@ def menu_texte(entrees, options):
             lancer(entree)
             input("\nAppuyez sur Entrée pour revenir au menu...")
         else:
-            input(style("Choix invalide.", ROUGE) + " Appuyez sur Entrée pour continuer...")
+            input(style("Choix invalide.", "erreur") + " Appuyez sur Entrée pour continuer...")
 
 
 def menu_curses(entrees, options):
@@ -419,49 +484,32 @@ def menu_curses(entrees, options):
 
 
 def _styles_curses():
-    """Renvoie les attributs curses de chaque élément du menu."""
-    styles = {
-        "logo": curses.A_BOLD,
-        "separateur": curses.A_NORMAL,
-        "titre": curses.A_BOLD,
-        "numero": curses.A_NORMAL,
-        "touche": curses.A_BOLD,
-        "indisponible": curses.A_DIM,
-        "erreur": curses.A_BOLD,
-        "aide": curses.A_DIM,
-        "titre_infos": curses.A_BOLD,
-        "texte": curses.A_NORMAL,
-        "discret": curses.A_DIM,
-        "rumeur": curses.A_NORMAL,
-        "selection": curses.A_REVERSE | curses.A_BOLD,
-        "groupe": curses.A_BOLD,
-        "description": curses.A_NORMAL,
-    }
-    if not (couleurs_autorisees and "NO_COLOR" not in os.environ and curses.has_colors()):
-        return styles
-
-    curses.start_color()
-    try:
-        curses.use_default_colors()
-        fond = -1
-    except curses.error:
-        fond = curses.COLOR_BLACK
-    for numero, couleur in enumerate(
-        (curses.COLOR_YELLOW, curses.COLOR_BLUE, curses.COLOR_CYAN, curses.COLOR_RED),
-        start=1,
-    ):
-        curses.init_pair(numero, couleur, fond)
-    jaune, bleu, cyan, rouge = (curses.color_pair(n) for n in range(1, 5))
-    styles.update(
-        logo=jaune | curses.A_BOLD,
-        separateur=bleu,
-        numero=cyan,
-        touche=jaune | curses.A_BOLD,
-        erreur=rouge | curses.A_BOLD,
-        rumeur=cyan,
-        groupe=bleu | curses.A_BOLD,
-        description=cyan,
+    """Renvoie l'attribut curses de chaque élément du menu, selon le thème."""
+    couleurs_ok = (
+        couleurs_autorisees and "NO_COLOR" not in os.environ and curses.has_colors()
     )
+    if couleurs_ok:
+        curses.start_color()
+        try:
+            curses.use_default_colors()
+            fond = -1
+        except curses.error:
+            fond = curses.COLOR_BLACK
+
+    attributs_curses = {"gras": curses.A_BOLD, "pale": curses.A_DIM}
+    paires = {}  # couleur -> paire de couleurs curses
+    styles = {"selection": curses.A_REVERSE | curses.A_BOLD}
+    for element, (couleur, *attributs) in styles_du_theme().items():
+        attribut = curses.A_NORMAL
+        for nom in attributs:
+            attribut |= attributs_curses[nom]
+        if couleur and couleurs_ok:
+            if couleur not in paires:
+                numero = len(paires) + 1
+                curses.init_pair(numero, COULEURS.index(couleur), fond)
+                paires[couleur] = curses.color_pair(numero)
+            attribut |= paires[couleur]
+        styles[element] = attribut
     return styles
 
 
@@ -654,6 +702,11 @@ def analyser_arguments(argv):
         "--sans-couleur", action="store_true", help="désactive les couleurs"
     )
     parser.add_argument(
+        "--theme",
+        choices=THEMES,
+        help="thème de couleurs (remplace l'option « theme » de config.ini)",
+    )
+    parser.add_argument(
         "--texte",
         action="store_true",
         help="menu simple sans navigation aux flèches (pas de curses)",
@@ -662,7 +715,7 @@ def analyser_arguments(argv):
 
 
 def main(argv=None):
-    global couleurs_autorisees
+    global couleurs_autorisees, theme
     args = analyser_arguments(argv)
     if args.sans_couleur:
         couleurs_autorisees = False
@@ -672,6 +725,7 @@ def main(argv=None):
     except (ValueError, configparser.Error) as e:
         erreur(f"Erreur de configuration : {e}")
         return 1
+    theme = THEMES[args.theme or options.theme]
 
     if args.liste:
         for i, entree in enumerate(entrees, start=1):
