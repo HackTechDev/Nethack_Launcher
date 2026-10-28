@@ -31,6 +31,7 @@ LOGO = r"""
 """
 
 LARGEUR = 40
+DESCRIPTION_QUITTER = "Quitter le lanceur."
 
 # Codes ANSI de mise en forme
 GRAS, PALE = "1", "2"
@@ -69,6 +70,7 @@ class Entree:
     arguments: list = field(default_factory=list)
     touche: str = ""  # raccourci clavier (une lettre), facultatif
     groupe: str = ""  # titre du groupe sous lequel l'entrée est rangée, facultatif
+    description: str = ""  # affichée en bas du menu plein écran quand l'entrée est choisie
 
     def probleme(self):
         """Renvoie la raison pour laquelle le programme ne peut pas être lancé, sinon None."""
@@ -149,7 +151,11 @@ def charger_config(fichier: Path):
                 )
             touches[touche] = section
         groupe = config[section].get("groupe", "").strip()
-        entrees.append(Entree(section, libelle, chemin, arguments, touche, groupe))
+        # Une description sur plusieurs lignes dans config.ini est remise sur une seule
+        description = " ".join(config[section].get("description", "").split())
+        entrees.append(
+            Entree(section, libelle, chemin, arguments, touche, groupe, description)
+        )
 
     if not entrees:
         raise ValueError(f"aucune entrée définie dans {fichier}")
@@ -429,6 +435,7 @@ def _styles_curses():
         "rumeur": curses.A_NORMAL,
         "selection": curses.A_REVERSE | curses.A_BOLD,
         "groupe": curses.A_BOLD,
+        "description": curses.A_NORMAL,
     }
     if not (couleurs_autorisees and "NO_COLOR" not in os.environ and curses.has_colors()):
         return styles
@@ -453,6 +460,7 @@ def _styles_curses():
         erreur=rouge | curses.A_BOLD,
         rumeur=cyan,
         groupe=bleu | curses.A_BOLD,
+        description=cyan,
     )
     return styles
 
@@ -523,6 +531,22 @@ def _dessiner_curses(ecran, entrees, selection, infos, message, styles):
             ecrire(y, 0, texte, styles["titre_infos" if nom_style == "titre" else nom_style])
             y += 1
         y += 1
+
+    # Description de la ligne sélectionnée, si au moins une entrée en a une. On réserve
+    # la place de la plus longue pour que l'aide ne bouge pas d'une entrée à l'autre.
+    largeur_texte = max(min(largeur_ecran - 3, 76), 20)
+
+    def decouper(description):
+        return textwrap.wrap(description, width=largeur_texte)
+
+    descriptions = [e.description for e in entrees]
+    if any(descriptions):
+        descriptions.append(DESCRIPTION_QUITTER)
+    hauteur_description = max(len(decouper(d)) for d in descriptions)
+    if hauteur_description:
+        for i, ligne in enumerate(decouper(descriptions[selection])):
+            ecrire(y + i, 0, ligne, styles["description"])
+        y += hauteur_description + 1
 
     ecrire(y, 0, "↑/↓ choisir · Entrée lancer · touche ou numéro · q quitter", styles["aide"])
     if message:
@@ -656,6 +680,8 @@ def main(argv=None):
             commande = shlex.join([str(entree.chemin), *entree.arguments])
             touche = f" [{entree.touche}]" if entree.touche else ""
             print(f"{i}.{touche} {entree.nom} : {entree.libelle}{suffixe}\n   {commande}")
+            if entree.description:
+                print(f"   {entree.description}")
         return 0
 
     if args.entree is not None:
