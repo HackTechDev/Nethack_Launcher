@@ -3,8 +3,10 @@
 Petit lanceur en Python qui affiche un menu en terminal pour démarrer :
 
 1. **NetHack** — `~/nh/install/games/nethack`
-2. **L'éditeur de carte** — `~/JEUX/NETHACK/NetHack_MapEditor/nhmapedit.sh`
-3. **L'éditeur de monstres** — `~/JEUX/NETHACK/NetHack_MonsterEditor/nhmonedit.sh`
+2. **L'éditeur de secteurs** (cartes) — `~/JEUX/NETHACK/NetHack_MapEditor/nhmapedit.sh`
+3. **La fabrique de robots** (éditeur de monstres) — `~/JEUX/NETHACK/NetHack_MonsterEditor/nhmonedit.sh`
+
+Le lanceur suit l'univers du jeu : avec la version cyberpunk de NetHack (`OPTIONS=language:fr@cyber`), il devient un terminal de Night City, avec les mêmes noms que le jeu (voir [Univers et traductions](#univers-et-traductions)).
 
 ![Capture d'écran du menu du lanceur](docs/capture.png)
 
@@ -33,8 +35,8 @@ ou, depuis n'importe quel dossier (y compris via un lien symbolique, par exemple
 
 Le menu s'affiche en plein écran :
 
-- `↑` / `↓` pour choisir une entrée, `Entrée` pour la lancer (la ligne « Quitter » est aussi accessible aux flèches) ;
-- ou directement le numéro de l'entrée ou sa touche (`n` pour NetHack, `e` pour l'éditeur de carte, `m` pour l'éditeur de monstres) ;
+- `↑` / `↓` pour choisir une entrée, `Entrée` pour la lancer (la ligne « Déconnexion », ou « Quitter », est aussi accessible aux flèches) ;
+- ou directement le numéro de l'entrée ou sa touche (`n` pour NetHack, `e` pour l'éditeur de secteurs, `m` pour la fabrique de robots) ;
 - `q` ou `Échap` pour quitter ;
 - à la souris : un clic choisit une ligne, un double-clic la lance, la molette monte ou descend.
 
@@ -44,7 +46,7 @@ L'option `--texte` affiche à la place un menu simple, où l'on tape son choix p
 
 Sous le menu sont affichés une rumeur de NetHack tirée au hasard (celles des fortune cookies), les meilleurs scores et un résumé de la dernière partie, lus dans le journal des parties de NetHack (`xlogfile`). Les parties en mode wizard ou exploration ne comptent pas dans les meilleurs scores.
 
-Les lignes des scores et de la dernière partie se choisissent aussi, avec les flèches (après « Quitter ») ou la souris. Entrée affiche alors le détail de la partie : personnage, fin de la partie, dates, temps de jeu, nombre de tours, profondeur atteinte, points de vie, or, conduites respectées et exploits. Dans le menu `--texte`, tapez `s1`, `s2`… pour le détail d'un score, ou `sd` pour la dernière partie.
+Les lignes des scores et de la dernière partie se choisissent aussi, avec les flèches (après « Déconnexion ») ou la souris. Entrée affiche alors le détail de la partie : personnage, fin de la partie, dates, temps de jeu, nombre de tours, profondeur atteinte, points de vie, or, conduites respectées et exploits. Dans le menu `--texte`, tapez `s1`, `s2`… pour le détail d'un score, ou `sd` pour la dernière partie.
 
 Si le programme d'une entrée n'existe pas ou n'est pas exécutable, le menu l'indique à côté de son libellé, par exemple `(introuvable)`.
 
@@ -75,26 +77,26 @@ Les chemins des programmes sont définis dans `config.ini`, à côté du script.
 
 ```ini
 [nethack]
-libelle = Jouer à NetHack
+libelle = Jack-in : NetHack
 chemin = ~/nh/install/games/nethack
 touche = n
-groupe = Jeu
-description = Lance une partie de NetHack 5.0.
+groupe = Réseau
+description = Se brancher sur Night City pour un nouveau run, ou reprendre le run sauvegardé.
 
 [editeur]
-libelle = Éditeur de carte
+libelle = Éditeur de secteurs
 chemin = ~/JEUX/NETHACK/NetHack_MapEditor/nhmapedit.sh
 touche = e
-groupe = Outils
-description = Crée et modifie les cartes des niveaux spéciaux (scripts Lua).
+groupe = Atelier
+description = Dessine les plans des secteurs spéciaux de Night City (scripts Lua).
 fichiers_recents = ~/JEUX/NETHACK/NetHack_MapEditor/essais/*.lua ~/nh/install/games/lib/nethackdir/*.lua
 
 [monstres]
-libelle = Éditeur de monstres
+libelle = Fabrique de robots
 chemin = ~/JEUX/NETHACK/NetHack_MonsterEditor/nhmonedit.sh
 touche = m
-groupe = Outils
-description = Crée les robots et mechas de la version cyberpunk et les ajoute au jeu.
+groupe = Atelier
+description = Conçoit les robots et mechas de Night City et les injecte dans le jeu.
 fichiers_recents = ~/JEUX/NETHACK/NetHack_MonsterEditor/*.json
 ```
 
@@ -159,8 +161,8 @@ Chaque lancement est noté dans un journal, avec sa date, sa durée et le code d
 
 ```
 Programme            Lancements  Temps total  Dernier lancement
-Jouer à NetHack              12   5 h 32 min  28/10/2026 20:15
-Éditeur de carte              4       47 min  27/10/2026 18:02
+Jack-in : NetHack            12   5 h 32 min  28/10/2026 20:15
+Éditeur de secteurs           4       47 min  27/10/2026 18:02
 Total                        16   6 h 19 min
 ```
 
@@ -173,7 +175,8 @@ La section `[options]` est réservée : ce n'est pas une entrée du menu.
 dossier_nethack = ~/nh/install/games/lib/nethackdir
 nombre_scores = 3
 rumeur = oui
-theme = classique
+langue = auto
+theme = auto
 souris = oui
 journal = ~/.local/state/nethack_launcher/journal.tsv
 ```
@@ -181,15 +184,33 @@ journal = ~/.local/state/nethack_launcher/journal.tsv
 - `dossier_nethack` : dossier de données de NetHack (le `HACKDIR` défini dans le script `nethack`), où se trouve le fichier `xlogfile`. Laissez la valeur vide pour ne pas afficher les scores
 - `nombre_scores` : nombre de meilleurs scores affichés (`0` pour aucun)
 - `rumeur` : affiche une rumeur au hasard (`oui` ou `non`)
-- `fichier_rumeurs` : fichier des rumeurs à utiliser (facultatif). Par défaut, le lanceur prend `rumors`, ou à défaut `rumors.<langue>` (par exemple `rumors.fr`), dans `dossier_nethack`
+- `fichier_rumeurs` : fichier des rumeurs à utiliser (facultatif). Par défaut, le lanceur prend `rumors.<langue>` (par exemple `rumors.fr@cyber`), sinon `rumors`, dans `dossier_nethack`
+- `langue` : langue des noms du jeu, par exemple `fr@cyber` ou `fr` (voir [Univers et traductions](#univers-et-traductions)). Avec `auto`, le lanceur prend celle de l'option `language` de NetHack, dans `~/.nethackrc` ou la variable `NETHACKOPTIONS`. L'option `--langue` permet d'en essayer une autre, par exemple `./nethack_launcher.sh --langue fr`
 - `theme` : couleurs du menu, parmi :
-  - `classique` : logo jaune, séparateurs bleus (par défaut)
+  - `auto` : `cyber` pour la version cyberpunk du jeu, sinon `classique` (par défaut)
+  - `classique` : logo jaune, séparateurs bleus
   - `cyber` : néons magenta, cyan et vert, assortis à la version cyberpunk de NetHack
   - `sobre` : sans couleur, uniquement du gras et du texte atténué
 
   L'option `--theme` permet d'essayer un thème sans modifier `config.ini`, par exemple `./nethack_launcher.sh --theme cyber`
 - `souris` : clic, double-clic et molette dans le menu plein écran (`oui` ou `non`). Avec `non`, le terminal garde la sélection de texte habituelle à la souris
 - `journal` : fichier du journal des lancements. Laissez la valeur vide pour ne pas tenir de journal
+
+### Univers et traductions
+
+Le lanceur reprend les noms du jeu au lieu de les traduire lui-même : il lit le catalogue de traductions de NetHack (`<langue>.mo`, par exemple `fr@cyber.mo`, dans `dossier_nethack`). Les rôles, races, alignements, monstres, causes de mort, rangs, exploits et la monnaie s'affichent donc comme dans le jeu, au masculin ou au féminin selon le personnage :
+
+| Dans le xlogfile | Version classique (`fr`) | Version cyberpunk (`fr@cyber`) |
+|---|---|---|
+| `Arc Hum Mal` | Archéologue humain | Techie humain |
+| `Pri Hum Fem` | Prêtresse humaine | Technoprêtresse humaine |
+| `killed by a kobold` | tué par un kobold | tué par un voyou |
+| `entered_the_gnomish_mines` | entré dans les Mines des gnomes | entré dans les Bas-fonds |
+| `gold` | Or | Eddies |
+
+Les rumeurs viennent aussi du fichier de la langue du jeu (`rumors.fr@cyber`).
+
+Avec une langue en `@cyber`, les textes du lanceur lui-même passent dans l'univers de Night City : « TERMINAL // NIGHT CITY », « Déconnexion », « Meilleurs runs », « Dossier du run »…, et le thème de couleurs `auto` devient `cyber`. Sans catalogue de traductions, les noms sont affichés en français classique.
 
 ## Licence
 

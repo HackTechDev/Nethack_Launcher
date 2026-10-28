@@ -8,6 +8,7 @@ import os
 import random
 import re
 import shlex
+import struct
 import subprocess
 import sys
 import textwrap
@@ -33,7 +34,104 @@ LOGO = r"""
 """
 
 LARGEUR = 40
-DESCRIPTION_QUITTER = "Quitter le lanceur."
+
+# Textes de l'interface. L'univers « cyber » suit la version cyberpunk du jeu
+# (langue fr@cyber), l'univers « classique » la version d'origine.
+TEXTES = {
+    "classique": {
+        "titre": "LANCEUR",
+        "quitter": "Quitter",
+        "description_quitter": "Quitter le lanceur.",
+        "aide": "↑/↓ choisir · Entrée lancer · touche ou numéro · q quitter",
+        "introuvable": "introuvable",
+        "non_executable": "non exécutable",
+        "touche_inconnue": "Touche inconnue : {touche}",
+        "retour_menu": "Appuyez sur Entrée pour revenir au menu...",
+        "invite": "Votre choix : ",
+        "choix_invalide": "Choix invalide.",
+        "continuer": " Appuyez sur Entrée pour continuer...",
+        "rouvrir": "↳ Rouvrir {nom}",
+        "description_rouvrir": "Ouvre {fichier} dans « {libelle} » (modifié le {date}).",
+        "meilleurs_scores": "Meilleurs scores",
+        "derniere_partie": "Dernière partie",
+        "points": "pts",
+        "aide_detail_texte": "Détail d'une partie : tapez {codes}",
+        "description_partie": "Entrée : voir le détail de cette partie.",
+        "titre_detail": "Partie de {nom}",
+        "retour_detail": "Appuyez sur une touche pour revenir au menu.",
+        "personnage": "Personnage",
+        "score": "Points",
+        "fin_partie": "Fin de la partie",
+        "mode": "Mode de jeu",
+        "debut": "Début",
+        "fin": "Fin",
+        "temps": "Temps de jeu",
+        "tours": "Tours",
+        "profondeur": "Profondeur",
+        "valeur_profondeur": "niveau {max} au plus profond, fin au niveau {fin}",
+        "points_de_vie": "Points de vie",
+        "or": "Or",
+        "voeux": "Vœux",
+        "conduites": "Conduites respectées",
+        "exploits": "Exploits",
+        "aucune": "aucune",
+        "aucun": "aucun",
+        "rang": "rang « {rang} »",
+        "mode_wizard": "wizard",
+        "mode_exploration": "exploration",
+    },
+    "cyber": {
+        "titre": "TERMINAL // NIGHT CITY",
+        "quitter": "Déconnexion",
+        "description_quitter": "Couper la liaison et quitter le terminal.",
+        "aide": "↑/↓ naviguer · Entrée connexion · touche ou numéro · q déconnexion",
+        "introuvable": "hors ligne",
+        "non_executable": "accès refusé",
+        "touche_inconnue": "Commande inconnue : {touche}",
+        "retour_menu": "Liaison terminée. Entrée pour revenir au terminal...",
+        "invite": "> Commande : ",
+        "choix_invalide": "Commande invalide.",
+        "continuer": " Entrée pour continuer...",
+        "rouvrir": "↳ Recharger {nom}",
+        "description_rouvrir": "Recharge {fichier} dans « {libelle} »"
+        " (dernière écriture le {date}).",
+        "meilleurs_scores": "Meilleurs runs",
+        "derniere_partie": "Dernier run",
+        "points": "pts",
+        "aide_detail_texte": "Dossier d'un run : tapez {codes}",
+        "description_partie": "Entrée : ouvrir le dossier de ce run.",
+        "titre_detail": "Dossier du run : {nom}",
+        "retour_detail": "Une touche pour refermer le dossier.",
+        "personnage": "Profil",
+        "score": "Score",
+        "fin_partie": "Fin du run",
+        "mode": "Mode",
+        "debut": "Connexion",
+        "fin": "Déconnexion",
+        "temps": "Temps en ligne",
+        "tours": "Tours",
+        "profondeur": "Profondeur",
+        "valeur_profondeur": "niveau {max} au plus profond, fin au niveau {fin}",
+        "points_de_vie": "Points de vie",
+        "or": "Eddies",
+        "voeux": "Vœux",
+        "conduites": "Protocoles respectés",
+        "exploits": "Exploits",
+        "aucune": "aucun",
+        "aucun": "aucun",
+        "rang": "rang « {rang} »",
+        "mode_wizard": "debug",
+        "mode_exploration": "exploration",
+    },
+}
+
+# Univers et traductions utilisés : choisis au démarrage selon la langue du jeu
+textes = TEXTES["classique"]
+
+
+def t(cle, **valeurs):
+    """Texte de l'interface dans l'univers choisi."""
+    return textes[cle].format(**valeurs) if valeurs else textes[cle]
 
 # Couleurs du terminal, dans l'ordre des codes ANSI (30 + indice) et de curses
 COULEURS = ["noir", "rouge", "vert", "jaune", "bleu", "magenta", "cyan", "blanc"]
@@ -137,9 +235,9 @@ class Entree:
     def probleme(self):
         """Renvoie la raison pour laquelle le programme ne peut pas être lancé, sinon None."""
         if not self.chemin.is_file():
-            return "introuvable"
+            return t("introuvable")
         if not os.access(self.chemin, os.X_OK):
-            return "non exécutable"
+            return t("non_executable")
         return None
 
 
@@ -154,9 +252,10 @@ class Options:
     nombre_scores: int = 3
     rumeur: bool = True
     fichier_rumeurs: Path = None  # par défaut : rumors ou rumors.* du dossier NetHack
-    theme: str = THEME_PAR_DEFAUT
+    theme: str = "auto"  # « auto » : cyber pour la version cyberpunk, sinon classique
     souris: bool = True  # clic et molette dans le menu plein écran
     journal: Path = field(default_factory=fichier_journal_par_defaut)  # None : pas de journal
+    langue: str = "auto"  # ex. fr@cyber ; « auto » : celle des options du jeu
 
 
 def chemin_config(valeur: str):
@@ -187,13 +286,62 @@ def charger_options(config):
     if "journal" in section:
         valeur = section["journal"].strip()
         options.journal = chemin_config(valeur) if valeur else None
+    options.langue = section.get("langue", options.langue).strip() or "auto"
     options.theme = section.get("theme", options.theme).strip().lower()
-    if options.theme not in THEMES:
+    if options.theme != "auto" and options.theme not in THEMES:
         raise ValueError(
             f"section [{SECTION_OPTIONS}] : thème inconnu « {options.theme} »"
-            f" (thèmes disponibles : {', '.join(THEMES)})"
+            f" (thèmes disponibles : auto, {', '.join(THEMES)})"
         )
     return options
+
+
+def langue_du_jeu():
+    """Langue choisie dans les options de NetHack (OPTIONS=language:…), sinon None.
+
+    On lit ~/.nethackrc puis la variable NETHACKOPTIONS (qui peut aussi désigner
+    un autre fichier d'options avec « @fichier ») : la dernière valeur l'emporte.
+    """
+    lignes = []
+    variable = os.environ.get("NETHACKOPTIONS", "")
+    fichiers = [Path(variable[1:]).expanduser()] if variable.startswith("@") else [
+        Path.home() / ".nethackrc"
+    ]
+    for fichier in fichiers:
+        try:
+            lignes += fichier.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            pass
+    if variable and not variable.startswith("@"):
+        lignes.append(variable)
+    langue = None
+    for ligne in lignes:
+        if ligne.lstrip().startswith("#"):
+            continue
+        for morceau in re.finditer(r"\blanguage:([^,\s]+)", ligne):
+            langue = morceau.group(1)
+    return langue
+
+
+def configurer_langue(options):
+    """Charge les traductions du jeu et choisit l'univers des textes ; renvoie l'univers.
+
+    La version cyberpunk du jeu (langue « fr@cyber ») donne l'univers « cyber ».
+    """
+    global trad, textes
+    if options.langue == "auto":
+        options.langue = langue_du_jeu() or ""
+    trad = Traductions()
+    if options.langue and options.dossier_nethack is not None:
+        catalogue = options.dossier_nethack / f"{options.langue}.mo"
+        if catalogue.is_file():
+            try:
+                trad = Traductions(lire_catalogue_mo(catalogue))
+            except (OSError, ValueError, struct.error) as e:
+                erreur(f"Traductions du jeu illisibles ({catalogue}) : {e}")
+    univers = "cyber" if options.langue.endswith("@cyber") else "classique"
+    textes = TEXTES[univers]
+    return univers
 
 
 def fichier_config_utilisateur():
@@ -321,6 +469,99 @@ def lire_parties(xlogfile: Path):
     return parties
 
 
+def lire_catalogue_mo(fichier: Path):
+    """Lit un catalogue gettext compilé (.mo) : {« contexte\x04msgid » : [formes]}."""
+    donnees = fichier.read_bytes()
+    if donnees[:4] == b"\xde\x12\x04\x95":
+        ordre = "<"
+    elif donnees[:4] == b"\x95\x04\x12\xde":
+        ordre = ">"
+    else:
+        raise ValueError(f"{fichier} n'est pas un catalogue .mo")
+    nombre, debut_originaux, debut_traductions = struct.unpack(ordre + "3I", donnees[8:20])
+    catalogue = {}
+    for i in range(nombre):
+        long_o, pos_o = struct.unpack_from(ordre + "2I", donnees, debut_originaux + 8 * i)
+        long_t, pos_t = struct.unpack_from(ordre + "2I", donnees, debut_traductions + 8 * i)
+        # Un message au pluriel est stocké « singulier\0pluriel » : on garde le singulier
+        original = donnees[pos_o:pos_o + long_o].decode("utf-8", "replace").split("\0")[0]
+        catalogue[original] = donnees[pos_t:pos_t + long_t].decode("utf-8", "replace").split("\0")
+    return catalogue
+
+
+class Traductions:
+    """Traductions du jeu, lues dans le fichier <langue>.mo du dossier NetHack."""
+
+    def __init__(self, catalogue=None):
+        self.catalogue = catalogue or {}
+        self._sans_casse = None
+
+    def get(self, message, *contextes, pluriel=False):
+        """Première traduction trouvée dans les contextes donnés (None : sans contexte)."""
+        for contexte in contextes or (None,):
+            formes = self.catalogue.get(f"{contexte}\x04{message}" if contexte else message)
+            if formes and formes[0]:
+                return formes[-1] if pluriel else formes[0]
+        return None
+
+    def get_sans_casse(self, message, *contextes):
+        """Comme get, sans tenir compte des majuscules (ex. rangs : « field worker »)."""
+        if self._sans_casse is None:
+            self._sans_casse = {}
+            for cle in self.catalogue:
+                contexte, _, original = cle.rpartition("\x04")
+                self._sans_casse.setdefault((contexte or None, original.lower()), cle)
+        for contexte in contextes or (None,):
+            cle = self._sans_casse.get((contexte, message.lower()))
+            if cle and self.catalogue[cle][0]:
+                return self.catalogue[cle][0]
+        return None
+
+    def prefixes(self, contexte):
+        """Messages d'un contexte, du plus long au plus court (ex. « killed by »)."""
+        debut = contexte + "\x04"
+        return sorted(
+            (cle[len(debut):] for cle in self.catalogue if cle.startswith(debut)),
+            key=len, reverse=True,
+        )
+
+
+trad = Traductions()
+
+# Noms anglais utilisés par le jeu, que l'on traduit avec son catalogue
+ROLES_ANGLAIS = {
+    "Arc": "Archeologist", "Bar": "Barbarian", "Cav": "Caveman", "Hea": "Healer",
+    "Kni": "Knight", "Mon": "Monk", "Pri": "Priest", "Ran": "Ranger", "Rog": "Rogue",
+    "Sam": "Samurai", "Tou": "Tourist", "Val": "Valkyrie", "Wiz": "Wizard",
+}
+ROLES_ANGLAIS_FEMININS = {"Cav": "Cavewoman", "Pri": "Priestess"}
+RACES_ANGLAIS = {"Hum": "human", "Elf": "elf", "Dwa": "dwarf", "Gno": "gnome", "Orc": "orc"}
+GENRES_ANGLAIS = {"Mal": "male", "Fem": "female"}
+ALIGNEMENTS_ANGLAIS = {"Law": "lawful", "Neu": "neutral", "Cha": "chaotic"}
+# Phrases du jeu qui décrivent les exploits du xlogfile (champ achieveX)
+PHRASES_EXPLOITS = {
+    "entered_the_gnomish_mines": "You entered the Gnomish Mines.",
+    "entered_mine_town": "You entered Minetown.",
+    "entered_a_shop": "You entered a shop.",
+    "entered_a_temple": "You entered a temple.",
+    "consulted_the_oracle": "You consulted the Oracle of Delphi.",
+    "entered_sokoban": "You entered Sokoban.",
+    "entered_bigroom": "You entered the Big Room.",
+    "entered_gehennom": "You entered Gehennom.",
+    "completed_sokoban": "You completed Sokoban.",
+    "completed_the_gnomish_mines": "You completed the Gnomish Mines.",
+    "defeated_medusa": "You defeated Medusa.",
+    "learned_castle_drawbridge_tune":
+        "You learned the tune to open and close the Castle's drawbridge.",
+}
+# Fins de partie sans tueur, à la 3e personne (masculin, féminin)
+FINS_SIMPLES = {
+    "quit": ("a abandonné", "a abandonné"),
+    "escaped": ("s'est échappé", "s'est échappée"),
+    "ascended": ("est monté au ciel", "est montée au ciel"),
+}
+
+# Noms français de secours, quand le catalogue du jeu est absent
 ROLES = {
     "Arc": "Archéologue", "Bar": "Barbare", "Cav": "Homme des cavernes",
     "Hea": "Guérisseur", "Kni": "Chevalier", "Mon": "Moine", "Pri": "Prêtre",
@@ -335,6 +576,7 @@ ROLES_FEMININS = {
 RACES = {"Hum": "humain", "Elf": "elfe", "Dwa": "nain", "Gno": "gnome", "Orc": "orc"}
 GENRES = {"Mal": "homme", "Fem": "femme"}
 ALIGNEMENTS = {"Law": "loyal", "Neu": "neutre", "Cha": "chaotique"}
+FEMININS = {"humain": "humaine", "nain": "naine", "loyal": "loyale"}
 CONDUITES = {
     "foodless": "sans manger", "vegan": "végétalien", "vegetarian": "végétarien",
     "atheist": "athée", "weaponless": "sans arme", "pacifist": "pacifiste",
@@ -352,36 +594,136 @@ EXPLOITS = {
     "entered_sokoban": "Sokoban", "entered_bigroom": "la Grande salle",
     "entered_gehennom": "la Géhenne",
 }
-DESCRIPTION_PARTIE = "Entrée : voir le détail de cette partie."
+
+
+def est_feminin(champs):
+    return champs.get("gender") == "Fem"
+
+
+def contextes_genre(champs):
+    """Contextes de traduction à essayer : la forme féminine d'abord, si besoin."""
+    return ("feminine", None) if est_feminin(champs) else (None,)
+
+
+def traduire_code(champs, cle, anglais, francais):
+    """Traduit un code du xlogfile (rôle, race…) avec le catalogue du jeu, sinon en français."""
+    code = champs.get(cle, "?")
+    mot_anglais = anglais.get(code)
+    if cle == "role" and est_feminin(champs):
+        mot_anglais = ROLES_ANGLAIS_FEMININS.get(code, mot_anglais)
+    if mot_anglais:
+        traduit = trad.get(mot_anglais, *contextes_genre(champs))
+        if traduit:
+            return traduit
+    if cle == "role":
+        return (ROLES_FEMININS.get(code) if est_feminin(champs) else None) or ROLES.get(code, code)
+    mot = francais.get(code, code)
+    return FEMININS.get(mot, mot) if est_feminin(champs) else mot
+
+
+def nom_role(champs):
+    return traduire_code(champs, "role", ROLES_ANGLAIS, ROLES)
+
+
+def nom_race(champs):
+    return traduire_code(champs, "race", RACES_ANGLAIS, RACES)
+
+
+def personnage_court(champs):
+    """Ex. « Techie humain » (version cyberpunk) ou « Archéologue humain »."""
+    return f"{nom_role(champs)} {nom_race(champs)}"
 
 
 def decrire_personnage(champs):
-    """Ex. « Valkyrie humaine, femme, loyale (Val Hum Fem Law) »."""
-    role, race = champs.get("role", "?"), champs.get("race", "?")
-    genre, alignement = champs.get("gender", "?"), champs.get("align", "?")
-    feminin = genre == "Fem"
-    nom_role = (ROLES_FEMININS.get(role) if feminin else None) or ROLES.get(role, role)
-    nom_race = RACES.get(race, race)
-    nom_alignement = ALIGNEMENTS.get(alignement, alignement)
-    if feminin:
-        nom_race = {"humain": "humaine", "nain": "naine"}.get(nom_race, nom_race)
-        nom_alignement = {"loyal": "loyale"}.get(nom_alignement, nom_alignement)
-    return (
-        f"{nom_role} {nom_race}, {GENRES.get(genre, genre)}, {nom_alignement}"
-        f" ({role} {race} {genre} {alignement})"
-    )
+    """Ex. « Solo humaine, femme, loyale (Val Hum Fem Law) »."""
+    genre = traduire_code(champs, "gender", GENRES_ANGLAIS, GENRES)
+    alignement = traduire_code(champs, "align", ALIGNEMENTS_ANGLAIS, ALIGNEMENTS)
+    codes = " ".join(champs.get(cle, "?") for cle in ("role", "race", "gender", "align"))
+    return f"{personnage_court(champs)}, {genre}, {alignement} ({codes})"
 
 
-def traduire_exploit(exploit):
+def de(nom):
+    """« de Méduse », « d'Athéna »."""
+    return ("d'" if nom[:1].lower() in "aâàeéèêiîïoôuûyh" else "de ") + nom
+
+
+def traduire_tueur(tueur):
+    """Traduit « a kobold », « the Oracle »… avec le catalogue du jeu."""
+    traduit = trad.get(tueur, "killer")
+    if traduit:
+        return traduit
+    colere = re.fullmatch(r"the wrath of (.+)", tueur)
+    if colere:
+        return "la colère " + de(trad.get(colere[1], "god") or colere[1])
+    forme = re.fullmatch(r"(a|an|the) (.+) in (\w+) form", tueur)  # ex. vampire en chauve-souris
+    if forme:
+        animal = trad.get(forme[3], "monster") or forme[3]
+        return f"{traduire_tueur(f'{forme[1]} {forme[2]}')} sous forme {de(animal)}"
+    morceaux = re.fullmatch(r"(a|an|the) (.+)", tueur)
+    if not morceaux:
+        return trad.get(tueur, "monster") or tueur
+    article, nom = morceaux.groups()
+    if article != "the":
+        traduit = trad.get(nom, "killer a", "symbol a")  # article compris : « un voyou »
+        if traduit:
+            return traduit
+    monstre = trad.get(nom, "monster")
+    if not monstre:
+        return tueur
+    feminin = trad.get(nom, "gender") == "f"
+    if article != "the":
+        return ("une " if feminin else "un ") + monstre
+    if monstre[:1].lower() in "aâàeéèêiîïoôuûyh":
+        return "l'" + monstre
+    return ("la " if feminin else "le ") + monstre
+
+
+def traduire_mort(champs, avec_circonstances=True):
+    """Fin de la partie dans la langue du jeu, ex. « tué par un voyou ».
+
+    Les circonstances (« pendant un évanouissement… ») sont omises si demandé,
+    pour les lignes courtes du menu.
+    """
+    mort = champs.get("death", "?")
+    feminin = est_feminin(champs)
+    if mort in FINS_SIMPLES:
+        texte = FINS_SIMPLES[mort][feminin]
+    else:
+        texte = trad.get(mort, *contextes_genre(champs))  # ex. « starved to death »
+        if not texte:
+            texte = mort
+            for prefixe in trad.prefixes("killed by"):
+                if mort.startswith(prefixe):
+                    contextes = ("feminine killed by", "killed by") if feminin else ("killed by",)
+                    texte = trad.get(prefixe, *contextes) + traduire_tueur(mort[len(prefixe):])
+                    break
+    if champs.get("while") and avec_circonstances:
+        pendant = f", while {champs['while']}"
+        texte += trad.get(pendant, "while") or pendant
+    return texte
+
+
+def traduire_exploit(champs, exploit):
     if exploit.startswith("attained_the_rank_of_"):
-        return "rang « " + exploit.removeprefix("attained_the_rank_of_").replace("_", " ") + " »"
+        rang = exploit.removeprefix("attained_the_rank_of_").replace("_", " ")
+        return t("rang", rang=trad.get_sans_casse(rang, *contextes_genre(champs)) or rang)
+    phrase = PHRASES_EXPLOITS.get(exploit.lower())
+    if phrase:
+        contextes = ("heroine", None) if est_feminin(champs) else (None,)
+        traduit = trad.get(phrase, *contextes)
+        if traduit:
+            # « Vous êtes entré dans les Bas-fonds. » -> « entré dans les Bas-fonds »
+            exploit_traduit = re.sub(r"^Vous (avez|êtes) ", "", traduit).rstrip(".")
+            if est_feminin(champs):
+                exploit_traduit = re.sub(r"^entré\b", "entrée", exploit_traduit)
+            return exploit_traduit
     return EXPLOITS.get(exploit, exploit.replace("_", " "))
 
 
 def details_partie(partie: Partie, largeur=76):
     """Renvoie les lignes de l'écran de détail d'une partie, en couples (style, texte)."""
     c = partie.champs
-    lignes = [("titre_infos", f"Partie de {c.get('name', '?')}"), ("texte", "")]
+    lignes = [("titre_infos", t("titre_detail", nom=c.get("name", "?"))), ("texte", "")]
     marge = 24
 
     def ajouter(etiquette, valeur):
@@ -401,28 +743,30 @@ def details_partie(partie: Partie, largeur=76):
             return f"{datetime.fromtimestamp(entier(cle_epoch)):%d/%m/%Y à %H:%M}"
         return formater_date(c.get(cle_date, ""))
 
-    ajouter("Personnage", decrire_personnage(c))
-    ajouter("Points", partie.points)
-    fin = c.get("death", "?") + (f", while {c['while']}" if c.get("while") else "")
-    ajouter("Fin de la partie", fin)
-    ajouter("Mode de jeu", partie.mode)
-    ajouter("Début", horodatage("starttime", "birthdate"))
-    ajouter("Fin", horodatage("endtime", "deathdate"))
+    ajouter(t("personnage"), decrire_personnage(c))
+    ajouter(t("score"), partie.points)
+    ajouter(t("fin_partie"), traduire_mort(c))
+    if partie.mode:
+        ajouter(t("mode"), t(f"mode_{partie.mode}"))
+    ajouter(t("debut"), horodatage("starttime", "birthdate"))
+    ajouter(t("fin"), horodatage("endtime", "deathdate"))
     if entier("realtime") is not None:
-        ajouter("Temps de jeu", formater_duree(entier("realtime")))
-    ajouter("Tours", c.get("turns"))
+        ajouter(t("temps"), formater_duree(entier("realtime")))
+    ajouter(t("tours"), c.get("turns"))
     if entier("maxlvl") is not None:
-        ajouter("Profondeur", f"niveau {entier('maxlvl')} au plus profond,"
-                f" fin au niveau {c.get('deathlev', '?')}")
+        ajouter(t("profondeur"), t("valeur_profondeur", max=entier("maxlvl"),
+                                   fin=c.get("deathlev", "?")))
     if entier("hp") is not None:
-        ajouter("Points de vie", f"{entier('hp')} / {c.get('maxhp', '?')}")
-    ajouter("Or", c.get("gold"))
+        ajouter(t("points_de_vie"), f"{entier('hp')} / {c.get('maxhp', '?')}")
+    # Nom de la monnaie dans la langue du jeu (« eddies » dans la version cyberpunk)
+    monnaie = trad.get("gold piece", pluriel=True)
+    ajouter(monnaie.capitalize() if monnaie else t("or"), c.get("gold"))
     if entier("wish_cnt"):
-        ajouter("Vœux", c["wish_cnt"])
+        ajouter(t("voeux"), c["wish_cnt"])
     conduites = [CONDUITES.get(x, x) for x in c.get("conductX", "").split(",") if x]
-    ajouter("Conduites respectées", ", ".join(conduites) or "aucune")
-    exploits = [traduire_exploit(x) for x in c.get("achieveX", "").split(",") if x]
-    ajouter("Exploits", ", ".join(exploits) or "aucun")
+    ajouter(t("conduites"), ", ".join(conduites) or t("aucune"))
+    exploits = [traduire_exploit(c, x) for x in c.get("achieveX", "").split(",") if x]
+    ajouter(t("exploits"), ", ".join(exploits) or t("aucun"))
     return lignes
 
 
@@ -440,8 +784,10 @@ def dechiffrer_rumeur(ligne: bytes):
     return resultat.decode("utf-8", errors="replace")
 
 
-def trouver_fichier_rumeurs(dossier: Path):
-    """Cherche le fichier des rumeurs : rumors, sinon rumors.<langue>."""
+def trouver_fichier_rumeurs(dossier: Path, langue=""):
+    """Cherche le fichier des rumeurs : rumors.<langue du jeu>, rumors, sinon rumors.*."""
+    if langue and (dossier / f"rumors.{langue}").is_file():
+        return dossier / f"rumors.{langue}"
     if (dossier / "rumors").is_file():
         return dossier / "rumors"
     candidats = sorted(dossier.glob("rumors.*"), key=lambda f: ("@" in f.name, f.name))
@@ -488,7 +834,7 @@ def preparer_infos(options: Options):
     if options.rumeur:
         fichier = options.fichier_rumeurs
         if fichier is None and options.dossier_nethack is not None:
-            fichier = trouver_fichier_rumeurs(options.dossier_nethack)
+            fichier = trouver_fichier_rumeurs(options.dossier_nethack, options.langue)
         rumeurs = lire_rumeurs(fichier) if fichier else []
         if rumeurs:
             texte = f"« {random.choice(rumeurs)} »"
@@ -505,22 +851,23 @@ def preparer_infos(options: Options):
         (p for p in parties if not p.mode), key=lambda p: p.points, reverse=True
     )
     if classees and options.nombre_scores > 0:
-        infos.append(LigneInfo("titre", "Meilleurs scores"))
+        infos.append(LigneInfo("titre", t("meilleurs_scores")))
         for i, partie in enumerate(classees[: options.nombre_scores], start=1):
             infos.append(LigneInfo(
                 "texte",
-                f"  {i}. {partie.points:>6} pts  {partie.personnage}"
-                f"  {formater_date(partie.date)}  {partie.mort}",
+                f"  {i}. {partie.points:>6} {t('points')}  {personnage_court(partie.champs)}"
+                f"  {formater_date(partie.date)}  {traduire_mort(partie.champs, False)}",
                 partie,
                 f"s{i}",
             ))
     if parties:
         derniere = parties[-1]
-        mode = f", mode {derniere.mode}" if derniere.mode else ""
+        mode = f", mode {t('mode_' + derniere.mode)}" if derniere.mode else ""
         infos.append(LigneInfo(
             "discret",
-            f"Dernière partie : {derniere.points} pts, {derniere.personnage},"
-            f" {derniere.mort} ({formater_date(derniere.date)}{mode})",
+            f"{t('derniere_partie')} : {derniere.points} {t('points')},"
+            f" {personnage_court(derniere.champs)}, {traduire_mort(derniere.champs, False)}"
+            f" ({formater_date(derniere.date)}{mode})",
             derniere,
             "sd",
         ))
@@ -548,12 +895,12 @@ def ajouter_fichiers_recents(entrees):
         modifie = datetime.fromtimestamp(fichier.stat().st_mtime)
         resultat.append(Entree(
             nom=f"{entree.nom}-recent",
-            libelle=f"↳ Rouvrir {fichier.name}",
+            libelle=t("rouvrir", nom=fichier.name),
             chemin=entree.chemin,
             arguments=[*entree.arguments, str(fichier)],
             groupe=entree.groupe,
-            description=f"Ouvre {fichier} dans « {entree.libelle} »"
-            f" (modifié le {modifie:%d/%m/%Y à %H:%M}).",
+            description=t("description_rouvrir", fichier=fichier, libelle=entree.libelle,
+                          date=f"{modifie:%d/%m/%Y à %H:%M}"),
         ))
     return resultat
 
@@ -607,7 +954,7 @@ def afficher_menu(entrees, infos=()):
     separateur = style("=" * LARGEUR, "separateur")
     print(style(LOGO, "logo"))
     print(separateur)
-    print(style("LANCEUR".center(LARGEUR).rstrip(), "titre"))
+    print(style(t("titre").center(LARGEUR).rstrip(), "titre"))
     print(separateur)
     largeur = len(str(len(entrees)))
     for genre, valeur in structure_menu(entrees):
@@ -626,7 +973,7 @@ def afficher_menu(entrees, infos=()):
         else:
             libelle = entree.libelle
         print(f"  {numero} {touche}  {libelle}")
-    print(f"  {'':>{largeur}} {style('[q]', 'touche')}  Quitter")
+    print(f"  {'':>{largeur}} {style('[q]', 'touche')}  {t('quitter')}")
     print(separateur)
     if infos:
         print()
@@ -634,7 +981,7 @@ def afficher_menu(entrees, infos=()):
             print(style(ligne.texte, "titre_infos" if ligne.style == "titre" else ligne.style))
         codes = [ligne.code for ligne in infos if ligne.partie]
         if codes:
-            print(style(f"\nDétail d'une partie : tapez {', '.join(codes)}", "aide"))
+            print(style("\n" + t("aide_detail_texte", codes=", ".join(codes)), "aide"))
         print()
 
 
@@ -752,7 +1099,7 @@ def menu_texte(entrees_config, options):
         infos = preparer_infos(options)
         afficher_menu(entrees, infos)
         try:
-            choix = input(style("Votre choix : ", "invite")).strip().lower()
+            choix = input(style(t("invite"), "invite")).strip().lower()
         except (EOFError, KeyboardInterrupt):
             print()
             return 0
@@ -763,14 +1110,14 @@ def menu_texte(entrees_config, options):
         if choix in parties:
             effacer_ecran()
             afficher_partie(parties[choix])
-            input("\nAppuyez sur Entrée pour revenir au menu...")
+            input("\n" + t("retour_menu"))
             continue
         entree = trouver_entree(entrees, choix)
         if entree:
             lancer(entree, journal=options.journal)
-            input("\nAppuyez sur Entrée pour revenir au menu...")
+            input("\n" + t("retour_menu"))
         else:
-            input(style("Choix invalide.", "erreur") + " Appuyez sur Entrée pour continuer...")
+            input(style(t("choix_invalide"), "erreur") + t("continuer"))
 
 
 def menu_curses(entrees, options):
@@ -832,7 +1179,7 @@ def _dessiner_curses(ecran, entrees, selection, infos, message, styles):
     y += 1
     separateur = "=" * LARGEUR
     ecrire(y, 0, separateur, styles["separateur"])
-    ecrire(y + 1, 0, "LANCEUR".center(LARGEUR).rstrip(), styles["titre"])
+    ecrire(y + 1, 0, t("titre").center(LARGEUR).rstrip(), styles["titre"])
     ecrire(y + 2, 0, separateur, styles["separateur"])
     y += 3
 
@@ -865,11 +1212,11 @@ def _dessiner_curses(ecran, entrees, selection, infos, message, styles):
     # La ligne « Quitter » suit les entrées : elle est sélectionnée quand selection == len(entrees)
     zones[y] = len(entrees)
     if selection == len(entrees):
-        texte = f"  {'':>{largeur}} [q]  Quitter"
+        texte = f"  {'':>{largeur}} [q]  {t('quitter')}"
         ecrire(y, 0, texte.ljust(LARGEUR), styles["selection"])
     else:
         x = ecrire(y, 2 + largeur + 1, "[q]", styles["touche"])
-        ecrire(y, x + 2, "Quitter")
+        ecrire(y, x + 2, t("quitter"))
     ecrire(y + 1, 0, separateur, styles["separateur"])
     y += 3
 
@@ -895,15 +1242,15 @@ def _dessiner_curses(ecran, entrees, selection, infos, message, styles):
         return textwrap.wrap(description, width=largeur_texte)
 
     descriptions = [e.description for e in entrees]
-    descriptions.append(DESCRIPTION_QUITTER if any(descriptions) else "")
-    descriptions += [DESCRIPTION_PARTIE for ligne in infos if ligne.partie]
+    descriptions.append(t("description_quitter") if any(descriptions) else "")
+    descriptions += [t("description_partie") for ligne in infos if ligne.partie]
     hauteur_description = max(len(decouper(d)) for d in descriptions)
     if hauteur_description:
         for i, ligne in enumerate(decouper(descriptions[selection])):
             ecrire(y + i, 0, ligne, styles["description"])
         y += hauteur_description + 1
 
-    ecrire(y, 0, "↑/↓ choisir · Entrée lancer · touche ou numéro · q quitter", styles["aide"])
+    ecrire(y, 0, t("aide"), styles["aide"])
     if message:
         ecrire(y + 1, 0, message, styles["erreur"])
     ecran.refresh()
@@ -917,7 +1264,7 @@ def _lancer_hors_curses(ecran, entree, journal):
     effacer_ecran()
     lancer(entree, journal=journal)
     try:
-        input("\nAppuyez sur Entrée pour revenir au menu...")
+        input("\n" + t("retour_menu"))
     except (EOFError, KeyboardInterrupt):
         pass
     curses.reset_prog_mode()
@@ -930,7 +1277,7 @@ def _afficher_partie_curses(ecran, partie, styles):
         ecran.erase()
         hauteur, largeur_ecran = ecran.getmaxyx()
         lignes = details_partie(partie, largeur=min(largeur_ecran - 1, 100))
-        lignes += [("texte", ""), ("aide", "Appuyez sur une touche pour revenir au menu.")]
+        lignes += [("texte", ""), ("aide", t("retour_detail"))]
         for y, (nom_style, texte) in enumerate(lignes[:hauteur]):
             try:
                 ecran.addstr(y, 0, texte[: max(largeur_ecran - 1, 0)], styles[nom_style])
@@ -1028,7 +1375,7 @@ def _boucle_curses(ecran, entrees_config, options):
                 return 0
             entree = trouver_entree(entrees, touche)
             if entree is None:
-                message = f"Touche inconnue : {touche}"
+                message = t("touche_inconnue", touche=touche)
                 continue
         elif touche == "\x1b":  # Échap
             return 0
@@ -1091,8 +1438,13 @@ def analyser_arguments(argv):
         " configuration personnelle ; peut être répété, les fichiers étant lus dans l'ordre",
     )
     parser.add_argument(
+        "--langue",
+        metavar="LANGUE",
+        help="langue des noms du jeu, ex. fr@cyber ou fr (remplace l'option « langue »)",
+    )
+    parser.add_argument(
         "--theme",
-        choices=THEMES,
+        choices=["auto", *THEMES],
         help="thème de couleurs (remplace l'option « theme » de config.ini)",
     )
     parser.add_argument(
@@ -1115,7 +1467,13 @@ def main(argv=None):
     except (ValueError, configparser.Error) as e:
         erreur(f"Erreur de configuration ({', '.join(map(str, fichiers))}) : {e}")
         return 1
-    theme = THEMES[args.theme or options.theme]
+    if args.langue:
+        options.langue = args.langue
+    univers = configurer_langue(options)
+    nom_theme = args.theme or options.theme
+    if nom_theme == "auto":
+        nom_theme = "cyber" if univers == "cyber" else THEME_PAR_DEFAUT
+    theme = THEMES[nom_theme]
     entrees_config = entrees
     entrees = ajouter_fichiers_recents(entrees)
 
