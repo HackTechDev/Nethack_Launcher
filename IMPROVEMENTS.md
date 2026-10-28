@@ -1,6 +1,6 @@
 # Idées d'amélioration
 
-Pistes pour faire évoluer le lanceur. Les idées marquées ⭐ sont celles à faire en priorité.
+Pistes pour faire évoluer le lanceur. Les idées marquées ⭐ sont celles à faire en priorité, celles marquées ✅ sont faites.
 
 ## Pour jouer
 
@@ -18,9 +18,9 @@ Pistes pour faire évoluer le lanceur. Les idées marquées ⭐ sont celles à f
 ## Confort du menu
 
 8. **Recharger la configuration à chaud** : touche `r`, ou rechargement automatique si `config.ini` a changé, sans quitter le lanceur.
-9. **Séparateurs et groupes dans le menu** : par exemple « Jeu » et « Outils », définis dans la config avec une clé `groupe`.
-10. **Description de l'entrée sélectionnée** : une clé `description` affichée en bas quand l'entrée est en surbrillance.
-11. **Thèmes de couleurs** : `theme = classique / cyber / sobre` dans `[options]`. Le thème « cyber » irait bien avec la version cyberpunk de NetHack.
+9. ✅ ~~**Séparateurs et groupes dans le menu**~~ : par exemple « Jeu » et « Outils », définis dans la config avec une clé `groupe`.
+10. ✅ ~~**Description de l'entrée sélectionnée**~~ : une clé `description` affichée en bas quand l'entrée est en surbrillance.
+11. ✅ ~~**Thèmes de couleurs**~~ : `theme = classique / cyber / sobre` dans `[options]`. Le thème « cyber » irait bien avec la version cyberpunk de NetHack.
 12. **Gestion de la souris** dans le menu curses : clic pour choisir une entrée, double-clic pour la lancer.
 
 ## Configuration
