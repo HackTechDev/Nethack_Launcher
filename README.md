@@ -35,7 +35,8 @@ Le menu s'affiche en plein écran :
 
 - `↑` / `↓` pour choisir une entrée, `Entrée` pour la lancer (la ligne « Quitter » est aussi accessible aux flèches) ;
 - ou directement le numéro de l'entrée ou sa touche (`n` pour NetHack, `e` pour l'éditeur de carte, `m` pour l'éditeur de monstres) ;
-- `q` ou `Échap` pour quitter.
+- `q` ou `Échap` pour quitter ;
+- à la souris : un clic choisit une ligne, un double-clic la lance, la molette monte ou descend.
 
 Quand le programme lancé se termine, appuyez sur Entrée pour revenir au menu.
 
@@ -125,6 +126,7 @@ dossier_nethack = ~/nh/install/games/lib/nethackdir
 nombre_scores = 3
 rumeur = oui
 theme = classique
+souris = oui
 ```
 
 - `dossier_nethack` : dossier de données de NetHack (le `HACKDIR` défini dans le script `nethack`), où se trouve le fichier `xlogfile`. Laissez la valeur vide pour ne pas afficher les scores
@@ -137,6 +139,7 @@ theme = classique
   - `sobre` : sans couleur, uniquement du gras et du texte atténué
 
   L'option `--theme` permet d'essayer un thème sans modifier `config.ini`, par exemple `./nethack_launcher.sh --theme cyber`
+- `souris` : clic, double-clic et molette dans le menu plein écran (`oui` ou `non`). Avec `non`, le terminal garde la sélection de texte habituelle à la souris
 
 ## Licence
 

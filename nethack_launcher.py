@@ -147,6 +147,7 @@ class Options:
     rumeur: bool = True
     fichier_rumeurs: Path = None  # par défaut : rumors ou rumors.* du dossier NetHack
     theme: str = THEME_PAR_DEFAUT
+    souris: bool = True  # clic et molette dans le menu plein écran
 
 
 def chemin_config(valeur: str):
@@ -170,6 +171,10 @@ def charger_options(config):
         raise ValueError(f"section [{SECTION_OPTIONS}] : rumeur doit valoir oui ou non")
     if section.get("fichier_rumeurs", "").strip():
         options.fichier_rumeurs = chemin_config(section["fichier_rumeurs"].strip())
+    try:
+        options.souris = section.getboolean("souris", options.souris)
+    except ValueError:
+        raise ValueError(f"section [{SECTION_OPTIONS}] : souris doit valoir oui ou non")
     options.theme = section.get("theme", options.theme).strip().lower()
     if options.theme not in THEMES:
         raise ValueError(
@@ -514,7 +519,9 @@ def _styles_curses():
 
 
 def _dessiner_curses(ecran, entrees, selection, infos, message, styles):
+    """Dessine le menu et renvoie {numéro de ligne à l'écran: indice sélectionnable}."""
     ecran.erase()
+    zones = {}
     hauteur, largeur_ecran = ecran.getmaxyx()
 
     def ecrire(y, x, texte, attribut=curses.A_NORMAL):
@@ -547,6 +554,7 @@ def _dessiner_curses(ecran, entrees, selection, infos, message, styles):
             y += 1
             continue
         i, entree = valeur, entrees[valeur]
+        zones[y] = i
         probleme = entree.probleme()
         numero = f"{i + 1:>{largeur}}"
         touche = f"[{entree.touche}]" if entree.touche else "   "
@@ -565,6 +573,7 @@ def _dessiner_curses(ecran, entrees, selection, infos, message, styles):
                 ecrire(y, x + 2, entree.libelle)
         y += 1
     # La ligne « Quitter » suit les entrées : elle est sélectionnée quand selection == len(entrees)
+    zones[y] = len(entrees)
     if selection == len(entrees):
         texte = f"  {'':>{largeur}} [q]  Quitter"
         ecrire(y, 0, texte.ljust(LARGEUR), styles["selection"])
@@ -600,6 +609,7 @@ def _dessiner_curses(ecran, entrees, selection, infos, message, styles):
     if message:
         ecrire(y + 1, 0, message, styles["erreur"])
     ecran.refresh()
+    return zones
 
 
 def _lancer_hors_curses(ecran, entree):
@@ -624,13 +634,21 @@ def _boucle_curses(ecran, entrees, options):
     curses.set_escdelay(25)
     ecran.keypad(True)
     styles = _styles_curses()
+    if options.souris:
+        # Clic : choisir une ligne ; double-clic : la lancer ; molette : monter ou descendre
+        curses.mousemask(
+            curses.BUTTON1_CLICKED
+            | curses.BUTTON1_DOUBLE_CLICKED
+            | curses.BUTTON4_PRESSED
+            | getattr(curses, "BUTTON5_PRESSED", 0)
+        )
     selection = 0  # de 0 à len(entrees) inclus, la dernière ligne étant « Quitter »
     nombre_lignes = len(entrees) + 1
     message = ""
     infos = preparer_infos(options)
 
     while True:
-        _dessiner_curses(ecran, entrees, selection, infos, message, styles)
+        zones = _dessiner_curses(ecran, entrees, selection, infos, message, styles)
         message = ""
         try:
             touche = ecran.get_wch()
@@ -651,6 +669,22 @@ def _boucle_curses(ecran, entrees, options):
         if touche == curses.KEY_END:
             selection = nombre_lignes - 1
             continue
+
+        if touche == curses.KEY_MOUSE:
+            try:
+                _, _, y, _, boutons = curses.getmouse()
+            except curses.error:
+                continue
+            if boutons & curses.BUTTON4_PRESSED:
+                selection = (selection - 1) % nombre_lignes
+            elif boutons & getattr(curses, "BUTTON5_PRESSED", 0):
+                selection = (selection + 1) % nombre_lignes
+            elif y in zones:
+                selection = zones[y]
+                if boutons & curses.BUTTON1_DOUBLE_CLICKED:
+                    touche = "\n"  # le double-clic vaut Entrée sur la ligne cliquée
+            if touche != "\n":
+                continue
 
         if touche in ("\n", "\r", curses.KEY_ENTER):
             if selection == len(entrees):
