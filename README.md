@@ -98,6 +98,15 @@ touche = m
 groupe = Atelier
 description = Conçoit les robots et mechas de Night City et les injecte dans le jeu.
 fichiers_recents = ~/JEUX/NETHACK/NetHack_MonsterEditor/*.json
+
+[heros]
+libelle = Clinique d'identités
+chemin = ~/JEUX/NETHACK/NetHack_HeroEditor/nhheroedit.sh
+touche = h
+groupe = Atelier
+description = Façonne les héros de Night City (rôle, race, implants de départ, tuile) et lance un run avec eux.
+fichiers_recents = ~/JEUX/NETHACK/NetHack_HeroEditor/*.json
+heros = oui
 ```
 
 - `libelle` : texte affiché dans le menu (facultatif, le nom de la section est utilisé par défaut)
@@ -107,6 +116,7 @@ fichiers_recents = ~/JEUX/NETHACK/NetHack_MonsterEditor/*.json
 - `groupe` : titre du groupe où ranger l'entrée (facultatif). Le menu affiche un titre pour chaque groupe et rassemble les entrées d'un même groupe, dans l'ordre où les groupes apparaissent dans le fichier
 - `description` : texte affiché en bas du menu plein écran quand l'entrée est sélectionnée (facultatif). Il est aussi affiché par `--liste`
 - `fichiers_recents` : motifs de fichiers séparés par des espaces, par exemple `~/cartes/*.lua` ou `~/cartes/**/*.lua` pour inclure les sous-dossiers (facultatif). Le menu ajoute sous l'entrée une ligne « ↳ Rouvrir *fichier* », qui lance le programme sur le fichier modifié le plus récemment. Cette ligne est mise à jour à chaque retour au menu, et peut être lancée directement avec `./nethack_launcher.sh editeur-recent`
+- `heros` : `oui` pour l'éditeur de héros [nhheroedit](../NetHack_HeroEditor) (facultatif). Le menu ajoute sous l'entrée une ligne « ↳ Jack-in : *nom* » par héros de son projet (le projet par défaut de l'éditeur, ou celui donné dans `arguments`), avec en description son rôle, sa race et son historique (nombre de parties, record, dernière fin), et « run en pause » s'il a une partie sauvegardée. Cette ligne lance la partie directement, avec les options complètes et la biographie du héros (`nhheroedit.sh --jouer NOM`) ; elle peut aussi être lancée avec `./nethack_launcher.sh heros-kestrel`
 
 Pour ajouter une entrée au menu, il suffit d'ajouter une nouvelle section. Par exemple, pour lancer directement un personnage précis ou le mode exploration :
 

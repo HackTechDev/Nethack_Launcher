@@ -4,6 +4,7 @@
 import argparse
 import configparser
 import glob
+import json
 import os
 import random
 import re
@@ -52,6 +53,9 @@ TEXTES = {
         "continuer": " Appuyez sur Entrée pour continuer...",
         "rouvrir": "↳ Rouvrir {nom}",
         "description_rouvrir": "Ouvre {fichier} dans « {libelle} » (modifié le {date}).",
+        "jouer_heros": "↳ Jouer : {nom}",
+        "partie_sauvee": " (partie sauvegardée)",
+        "description_heros": "{description}. Lance une partie avec ce héros de « {libelle} ».",
         "meilleurs_scores": "Meilleurs scores",
         "derniere_partie": "Dernière partie",
         "points": "pts",
@@ -95,6 +99,10 @@ TEXTES = {
         "rouvrir": "↳ Recharger {nom}",
         "description_rouvrir": "Recharge {fichier} dans « {libelle} »"
         " (dernière écriture le {date}).",
+        "jouer_heros": "↳ Jack-in : {nom}",
+        "partie_sauvee": " (run en pause)",
+        "description_heros": "{description}. Se brancher sur Night City avec"
+        " cette identité de « {libelle} ».",
         "meilleurs_scores": "Meilleurs runs",
         "derniere_partie": "Dernier run",
         "points": "pts",
@@ -231,6 +239,7 @@ class Entree:
     groupe: str = ""  # titre du groupe sous lequel l'entrée est rangée, facultatif
     description: str = ""  # affichée en bas du menu plein écran quand l'entrée est choisie
     fichiers_recents: list = field(default_factory=list)  # motifs, ex. ~/cartes/*.lua
+    heros: bool = False  # éditeur de héros : une entrée « Jack-in » par héros
 
     def probleme(self):
         """Renvoie la raison pour laquelle le programme ne peut pas être lancé, sinon None."""
@@ -416,8 +425,13 @@ def charger_config(fichiers):
             ]
         except ValueError as e:
             raise ValueError(f"section [{section}] : fichiers_recents invalides ({e})")
+        try:
+            heros = config[section].getboolean("heros", False)
+        except ValueError:
+            raise ValueError(f"section [{section}] : heros doit valoir oui ou non")
         entrees.append(
-            Entree(section, libelle, chemin, arguments, touche, groupe, description, motifs)
+            Entree(section, libelle, chemin, arguments, touche, groupe, description, motifs,
+                   heros)
         )
 
     if not entrees:
@@ -905,6 +919,54 @@ def ajouter_fichiers_recents(entrees):
     return resultat
 
 
+def lister_heros(entree: Entree):
+    """Héros du projet de l'éditeur de héros (nhheroedit --heros), sinon []."""
+    if entree.probleme():
+        return []
+    try:
+        sortie = subprocess.run(
+            [str(entree.chemin), *entree.arguments, "--heros"], cwd=entree.chemin.parent,
+            capture_output=True, text=True, timeout=10,
+        )
+        heros = json.loads(sortie.stdout)["heroes"] if sortie.returncode == 0 else []
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError):
+        return []
+    return [h for h in heros if isinstance(h, dict) and h.get("name")]
+
+
+def nom_section(nom: str):
+    """Nom d'entrée tapable en ligne de commande : « Kestrel » -> « kestrel »."""
+    return re.sub(r"[^a-z0-9]+", "-", nom.lower()).strip("-") or "heros"
+
+
+def ajouter_heros(entrees):
+    """Ajoute après chaque entrée « heros = oui » une entrée par héros du projet,
+    qui lance directement une partie avec lui (nhheroedit --jouer NOM)."""
+    resultat = []
+    for entree in entrees:
+        resultat.append(entree)
+        if not entree.heros:
+            continue
+        for heros in lister_heros(entree):
+            nom = heros["name"]
+            resultat.append(Entree(
+                nom=f"{entree.nom}-{nom_section(nom)}",
+                libelle=t("jouer_heros", nom=nom)
+                + (t("partie_sauvee") if heros.get("save") else ""),
+                chemin=entree.chemin,
+                arguments=[*entree.arguments, "--jouer", nom],
+                groupe=entree.groupe,
+                description=t("description_heros", description=heros.get("description", nom),
+                              libelle=entree.libelle),
+            ))
+    return resultat
+
+
+def entrees_du_menu(entrees):
+    """Entrées de la configuration, avec les « Rouvrir » et les héros à jouer."""
+    return ajouter_heros(ajouter_fichiers_recents(entrees))
+
+
 def trouver_entree(entrees, choix: str):
     """Renvoie l'entrée désignée par son numéro, sa touche ou son nom, sinon None."""
     choix = choix.strip().lower()
@@ -1094,7 +1156,7 @@ def afficher_journal(journal: Path, nombre_derniers=10):
 def menu_texte(entrees_config, options):
     """Menu simple : on tape le numéro ou la touche de l'entrée puis Entrée."""
     while True:
-        entrees = ajouter_fichiers_recents(entrees_config)  # les fichiers ont pu changer
+        entrees = entrees_du_menu(entrees_config)  # les fichiers ont pu changer
         effacer_ecran()
         infos = preparer_infos(options)
         afficher_menu(entrees, infos)
@@ -1315,7 +1377,7 @@ def _boucle_curses(ecran, entrees_config, options):
             | curses.BUTTON4_PRESSED
             | getattr(curses, "BUTTON5_PRESSED", 0)
         )
-    entrees = ajouter_fichiers_recents(entrees_config)
+    entrees = entrees_du_menu(entrees_config)
     infos = preparer_infos(options)
     # Lignes que l'on peut choisir : les entrées, « Quitter » (indice len(entrees)),
     # puis les parties affichées sous le menu
@@ -1388,7 +1450,7 @@ def _boucle_curses(ecran, entrees_config, options):
         parties = [ligne.partie for ligne in infos if ligne.partie]
         # Le programme a pu créer ou modifier des fichiers : on recalcule les « Rouvrir »
         nom_choisi = entree.nom
-        entrees = ajouter_fichiers_recents(entrees_config)
+        entrees = entrees_du_menu(entrees_config)
         nombre_lignes = len(entrees) + 1 + len(parties)
         noms = [e.nom for e in entrees]
         selection = noms.index(nom_choisi) if nom_choisi in noms else 0
@@ -1475,7 +1537,7 @@ def main(argv=None):
         nom_theme = "cyber" if univers == "cyber" else THEME_PAR_DEFAUT
     theme = THEMES[nom_theme]
     entrees_config = entrees
-    entrees = ajouter_fichiers_recents(entrees)
+    entrees = entrees_du_menu(entrees)
 
     if args.journal:
         if options.journal is None:
