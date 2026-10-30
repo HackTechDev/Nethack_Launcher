@@ -44,6 +44,9 @@ TEXTES = {
         "quitter": "Quitter",
         "description_quitter": "Quitter le lanceur.",
         "aide": "↑/↓ choisir · Entrée lancer · touche ou numéro · q quitter",
+        "barre": [("↑↓", "choisir"), ("Entrée", "lancer"), ("lettre/n°", "raccourci"),
+                  ("q", "quitter")],
+        "logo_court": "N E T H A C K",
         "introuvable": "introuvable",
         "non_executable": "non exécutable",
         "touche_inconnue": "Touche inconnue : {touche}",
@@ -89,6 +92,9 @@ TEXTES = {
         "quitter": "Déconnexion",
         "description_quitter": "Couper la liaison et quitter le terminal.",
         "aide": "↑/↓ naviguer · Entrée connexion · touche ou numéro · q déconnexion",
+        "barre": [("↑↓", "naviguer"), ("Entrée", "connexion"), ("lettre/n°", "raccourci"),
+                  ("q", "déconnexion")],
+        "logo_court": "N E T H A C K  //  N I G H T  C I T Y",
         "introuvable": "hors ligne",
         "non_executable": "accès refusé",
         "touche_inconnue": "Commande inconnue : {touche}",
@@ -155,6 +161,10 @@ STYLES_COMMUNS = {
     "discret": (None, "pale"),
     "aide": (None, "pale"),
     "indisponible": (None, "pale"),
+    "cadre": (None,),
+    "titre_cadre": (None, "gras"),
+    "selection": (None, "gras"),  # affiché en vidéo inverse
+    "accent": (None, "gras"),  # barre « ▌ » devant la ligne choisie
 }
 THEMES = {
     "classique": {
@@ -166,6 +176,10 @@ THEMES = {
         "erreur": ("rouge", "gras"),
         "rumeur": ("cyan",),
         "description": ("cyan",),
+        "cadre": ("bleu",),
+        "titre_cadre": ("jaune", "gras"),
+        "selection": ("jaune", "gras"),
+        "accent": ("jaune", "gras"),
     },
     "cyber": {
         "logo": ("magenta", "gras"),
@@ -177,6 +191,10 @@ THEMES = {
         "erreur": ("rouge", "gras"),
         "rumeur": ("vert",),
         "description": ("magenta",),
+        "cadre": ("cyan",),
+        "titre_cadre": ("magenta", "gras"),
+        "selection": ("cyan", "gras"),
+        "accent": ("magenta", "gras"),
     },
     "sobre": {
         "logo": (None, "gras"),
@@ -840,6 +858,8 @@ class LigneInfo:
     texte: str
     partie: Partie = None
     code: str = ""  # commande du menu texte pour voir le détail, ex. « s1 »
+    section: str = ""  # « rumeur », « scores » ou « derniere » : panneau du menu plein écran
+    panneau: str = ""  # texte dans ce panneau, s'il diffère de texte
 
 
 def preparer_infos(options: Options):
@@ -851,9 +871,11 @@ def preparer_infos(options: Options):
             fichier = trouver_fichier_rumeurs(options.dossier_nethack, options.langue)
         rumeurs = lire_rumeurs(fichier) if fichier else []
         if rumeurs:
-            texte = f"« {random.choice(rumeurs)} »"
+            rumeur = random.choice(rumeurs)
+            # certaines rumeurs sont déjà entre guillemets
+            texte = rumeur if rumeur.startswith("«") else f"« {rumeur} »"
             for ligne in textwrap.wrap(texte, width=70):
-                infos.append(LigneInfo("rumeur", ligne))
+                infos.append(LigneInfo("rumeur", ligne, section="rumeur"))
             infos.append(LigneInfo("texte", ""))
 
     if options.dossier_nethack is None:
@@ -867,23 +889,17 @@ def preparer_infos(options: Options):
     if classees and options.nombre_scores > 0:
         infos.append(LigneInfo("titre", t("meilleurs_scores")))
         for i, partie in enumerate(classees[: options.nombre_scores], start=1):
-            infos.append(LigneInfo(
-                "texte",
-                f"  {i}. {partie.points:>6} {t('points')}  {personnage_court(partie.champs)}"
-                f"  {formater_date(partie.date)}  {traduire_mort(partie.champs, False)}",
-                partie,
-                f"s{i}",
-            ))
+            texte = (f"{i}. {partie.points:>6} {t('points')}  {personnage_court(partie.champs)}"
+                     f"  {formater_date(partie.date)}  {traduire_mort(partie.champs, False)}")
+            infos.append(LigneInfo("texte", "  " + texte, partie, f"s{i}", "scores", texte))
     if parties:
         derniere = parties[-1]
         mode = f", mode {t('mode_' + derniere.mode)}" if derniere.mode else ""
+        resume = (f"{derniere.points} {t('points')}, {personnage_court(derniere.champs)},"
+                  f" {traduire_mort(derniere.champs, False)}"
+                  f" ({formater_date(derniere.date)}{mode})")
         infos.append(LigneInfo(
-            "discret",
-            f"{t('derniere_partie')} : {derniere.points} {t('points')},"
-            f" {personnage_court(derniere.champs)}, {traduire_mort(derniere.champs, False)}"
-            f" ({formater_date(derniere.date)}{mode})",
-            derniere,
-            "sd",
+            "discret", f"{t('derniere_partie')} : {resume}", derniere, "sd", "derniere", resume,
         ))
     return infos
 
@@ -1214,19 +1230,85 @@ def _styles_curses():
                 paires[couleur] = curses.color_pair(numero)
             attribut |= paires[couleur]
         styles[element] = attribut
+    styles["selection"] |= curses.A_REVERSE
     return styles
 
 
+LARGEUR_MAX = 110  # largeur maximale du menu plein écran
+LARGEUR_DEUX_PANNEAUX = 72  # en dessous, les panneaux sont l'un sous l'autre
+
+
+def couper(texte: str, largeur: int):
+    """Coupe le texte à la largeur donnée, en terminant par « … » s'il dépasse."""
+    if largeur <= 0:
+        return ""
+    return texte if len(texte) <= largeur else texte[: largeur - 1] + "…"
+
+
+def decouper(texte: str, largeur: int):
+    """Découpe le texte en lignes, sans séparer les guillemets « » de leur mot."""
+    texte = texte.replace("« ", "«\u00a0").replace(" »", "\u00a0»")
+    return [ligne.replace("\u00a0", " ") for ligne in textwrap.wrap(texte, width=largeur)]
+
+
+def lignes_panneau_menu(entrees):
+    """Lignes du panneau du menu : (titre du cadre, lignes), chaque ligne étant
+    ("groupe", titre), ("vide", None), ("entree", indice) ou ("quitter", None)."""
+    lignes = [("vide" if genre == "espace" else genre, valeur)
+              for genre, valeur in structure_menu(entrees)]
+    titre = ""
+    if lignes and lignes[0][0] == "groupe":
+        titre = lignes.pop(0)[1]  # le premier groupe s'affiche dans le haut du cadre
+    while lignes and lignes[0][0] == "vide":
+        lignes.pop(0)
+    if not lignes or lignes[-1][0] != "vide":
+        lignes.append(("vide", None))
+    lignes.append(("quitter", None))
+    return titre, lignes
+
+
+def _barre_touches(ecrire, y, largeur, styles):
+    """Barre des touches en bas de l'écran : « ↑↓ naviguer  Entrée connexion… » ;
+    les dernières touches sont omises si la largeur ne suffit pas."""
+    x = 1
+    for touche, action in textes["barre"]:
+        if x + len(touche) + 1 + len(action) > largeur:
+            break
+        x = ecrire(y, x, touche, styles["touche"])
+        x = ecrire(y, x + 1, action, styles["aide"]) + 3
+
+
+def _cadre(ecrire, y, x, hauteur, largeur, titre, styles, droite="", style_titre="titre_cadre"):
+    """Cadre arrondi, avec un titre en haut à gauche et un texte en haut à droite."""
+    ecrire(y, x, "╭" + "─" * (largeur - 2) + "╮", styles["cadre"])
+    for i in range(1, hauteur - 1):
+        ecrire(y + i, x, "│", styles["cadre"])
+        ecrire(y + i, x + largeur - 1, "│", styles["cadre"])
+    ecrire(y + hauteur - 1, x, "╰" + "─" * (largeur - 2) + "╯", styles["cadre"])
+    place = largeur - 6 - (len(droite) + 3 if droite else 0)
+    if titre and place > 0:
+        ecrire(y, x + 2, f" {couper(titre, place)} ", styles[style_titre])
+    if droite:
+        ecrire(y, x + largeur - len(droite) - 4, f" {droite} ", styles["cadre"])
+
+
+def _separation(ecrire, y, x, largeur, titre, styles, style_titre="groupe"):
+    """Ligne « ├─ Titre ─────┤ » qui sépare deux parties d'un cadre."""
+    ecrire(y, x, "├" + "─" * (largeur - 2) + "┤", styles["cadre"])
+    if titre:
+        ecrire(y, x + 2, f" {couper(titre, largeur - 6)} ", styles[style_titre])
+
+
 def _dessiner_curses(ecran, entrees, selection, infos, message, styles):
-    """Dessine le menu et renvoie {numéro de ligne à l'écran: indice sélectionnable}."""
+    """Dessine le menu et renvoie les zones cliquables : [(y, x début, x fin, indice)]."""
     ecran.erase()
-    zones = {}
+    zones = []
     hauteur, largeur_ecran = ecran.getmaxyx()
 
     def ecrire(y, x, texte, attribut=curses.A_NORMAL):
         """Écrit le texte en le coupant au bord de l'écran ; renvoie la colonne suivante."""
         place = largeur_ecran - x - 1
-        if y >= hauteur or place <= 0:
+        if y >= hauteur or y < 0 or place <= 0:
             return x
         try:
             ecran.addstr(y, x, texte[:place], attribut)
@@ -1234,89 +1316,158 @@ def _dessiner_curses(ecran, entrees, selection, infos, message, styles):
             pass
         return x + len(texte)
 
-    y = 0
-    for ligne in LOGO.strip("\n").splitlines():
-        ecrire(y, 0, ligne, styles["logo"])
-        y += 1
-    y += 1
-    separateur = "=" * LARGEUR
-    ecrire(y, 0, separateur, styles["separateur"])
-    ecrire(y + 1, 0, t("titre").center(LARGEUR).rstrip(), styles["titre"])
-    ecrire(y + 2, 0, separateur, styles["separateur"])
-    y += 3
+    largeur = max(min(largeur_ecran - 1, LARGEUR_MAX), 30)
+    deux_panneaux = largeur >= LARGEUR_DEUX_PANNEAUX
 
-    largeur = len(str(len(entrees)))
-    for genre, valeur in structure_menu(entrees):
-        if genre == "groupe":
-            ecrire(y, 0, titre_groupe(valeur), styles["groupe"])
-        if genre != "entree":
-            y += 1
-            continue
-        i, entree = valeur, entrees[valeur]
-        zones[y] = i
+    # --- panneau du menu ---
+    titre_menu, lignes_menu = lignes_panneau_menu(entrees)
+    largeur_cle = max(len(str(len(entrees))), 1)
+
+    def libelle_complet(entree):
         probleme = entree.probleme()
-        numero = f"{i + 1:>{largeur}}"
-        touche = f"[{entree.touche}]" if entree.touche else "   "
-        if i == selection:
-            texte = f"  {numero} {touche}  {entree.libelle}"
-            if probleme:
-                texte += f"  ({probleme})"
-            ecrire(y, 0, texte.ljust(LARGEUR), styles["selection"])
-        else:
-            x = ecrire(y, 2, numero, styles["numero"])
-            x = ecrire(y, x + 1, touche, styles["touche"])
-            if probleme:
-                x = ecrire(y, x + 2, entree.libelle, styles["indisponible"])
-                ecrire(y, x + 2, f"({probleme})", styles["erreur"])
-            else:
-                ecrire(y, x + 2, entree.libelle)
-        y += 1
-    # La ligne « Quitter » suit les entrées : elle est sélectionnée quand selection == len(entrees)
-    zones[y] = len(entrees)
-    if selection == len(entrees):
-        texte = f"  {'':>{largeur}} [q]  {t('quitter')}"
-        ecrire(y, 0, texte.ljust(LARGEUR), styles["selection"])
+        return entree.libelle + (f"  ({probleme})" if probleme else "")
+
+    plus_long = max([len(libelle_complet(e)) for e in entrees] + [len(t("quitter"))])
+    if deux_panneaux:
+        largeur_menu = min(max(plus_long + largeur_cle + 8, 30), largeur // 2)
     else:
-        x = ecrire(y, 2 + largeur + 1, "[q]", styles["touche"])
-        ecrire(y, x + 2, t("quitter"))
-    ecrire(y + 1, 0, separateur, styles["separateur"])
-    y += 3
+        largeur_menu = largeur
 
-    # Les lignes de parties (scores, dernière partie) se choisissent après « Quitter »
-    indice = len(entrees) + 1
-    if infos:
-        for ligne in infos:
-            nom_style = "titre_infos" if ligne.style == "titre" else ligne.style
-            if ligne.partie:
-                zones[y] = indice
-                if indice == selection:
-                    nom_style = "selection"
-                indice += 1
-            ecrire(y, 0, ligne.texte, styles[nom_style])
-            y += 1
+    # --- panneau de détail : description de la ligne choisie, scores, dernière partie ---
+    largeur_detail = largeur - largeur_menu if deux_panneaux else largeur
+    largeur_texte = largeur_detail - 4
+    parties = [ligne for ligne in infos if ligne.partie]
+    descriptions = [e.description for e in entrees]
+    descriptions.append(t("description_quitter"))
+    descriptions += [t("description_partie")] * len(parties)
+    hauteur_description = max(
+        len(decouper(d, largeur_texte)) for d in descriptions
+    )
+    lignes_detail = [("description", None)] * max(hauteur_description, 1)
+    for section, titre in (("scores", t("meilleurs_scores")),
+                           ("derniere", t("derniere_partie"))):
+        lignes_section = [ligne for ligne in parties if ligne.section == section]
+        if lignes_section:
+            lignes_detail.append(("section", titre))
+            lignes_detail += [("partie", ligne) for ligne in lignes_section]
+
+    hauteur_panneaux = max(len(lignes_menu), len(lignes_detail)) + 2
+    if deux_panneaux:
+        hauteur_corps = hauteur_panneaux
+    else:
+        hauteur_corps = len(lignes_menu) + 2 + len(lignes_detail) + 2
+
+    rumeur = " ".join(l.texte for l in infos if l.section == "rumeur")
+    lignes_rumeur = decouper(rumeur, largeur - 4) if rumeur else []
+
+    # --- en-tête : grand logo s'il y a la place, sinon une ligne ---
+    logo = LOGO.strip("\n").splitlines()
+    reste = hauteur - hauteur_corps - 2 - (len(lignes_rumeur) + 1 if lignes_rumeur else 0)
+    grand_logo = reste >= len(logo) + 2 and largeur >= max(len(l) for l in logo) + 4
+    heure = f"{datetime.now():%d/%m %H:%M}"
+    y = 0
+    if grand_logo:
+        _cadre(ecrire, y, 0, len(logo) + 2, largeur, t("titre"), styles, heure)
+        marge = (largeur - max(len(l) for l in logo)) // 2
+        for i, ligne in enumerate(logo):
+            ecrire(y + 1 + i, marge, ligne, styles["logo"])
+        y += len(logo) + 2
+    elif reste >= 3:
+        _cadre(ecrire, y, 0, 3, largeur, t("titre"), styles, heure)
+        court = t("logo_court")
+        ecrire(y + 1, max((largeur - len(court)) // 2, 2), couper(court, largeur - 4),
+               styles["logo"])
+        y += 3
+    else:
+        ecrire(y, 1, t("titre"), styles["titre_cadre"])
+        ecrire(y, largeur - len(heure) - 1, heure, styles["cadre"])
         y += 1
 
-    # Description de la ligne sélectionnée, si au moins une ligne en a une. On réserve
-    # la place de la plus longue pour que l'aide ne bouge pas d'une ligne à l'autre.
-    largeur_texte = max(min(largeur_ecran - 3, 76), 20)
+    # --- panneau du menu ---
+    hauteur_menu = hauteur_panneaux if deux_panneaux else len(lignes_menu) + 2
+    _cadre(ecrire, y, 0, hauteur_menu, largeur_menu, titre_menu, styles, style_titre="groupe")
+    interieur = largeur_menu - 3  # entre la barre « ▌ » et le bord droit
+    for n, (genre, valeur) in enumerate(lignes_menu):
+        ligne_y = y + 1 + n
+        if genre == "groupe":
+            _separation(ecrire, ligne_y, 0, largeur_menu, valeur, styles)
+            continue
+        if genre == "vide":
+            continue
+        if genre == "quitter":
+            indice, cle, libelle, probleme = len(entrees), "q", t("quitter"), ""
+        else:
+            indice, entree = valeur, entrees[valeur]
+            cle = entree.touche or str(valeur + 1)
+            libelle, probleme = entree.libelle, entree.probleme()
+        zones.append((ligne_y, 0, largeur_menu - 1, indice))
+        if indice == selection:
+            texte = f" {cle:>{largeur_cle}}  {libelle_complet(entree) if probleme else libelle}"
+            ecrire(ligne_y, 1, "▌", styles["accent"])
+            ecrire(ligne_y, 2, couper(texte, interieur).ljust(interieur), styles["selection"])
+            continue
+        style_cle = "touche" if genre == "quitter" or entree.touche else "numero"
+        x = ecrire(ligne_y, 3, f"{cle:>{largeur_cle}}", styles[style_cle]) + 2
+        place = interieur - (x - 2)
+        if probleme:
+            x = ecrire(ligne_y, x, couper(libelle, place), styles["indisponible"])
+            ecrire(ligne_y, x + 2, couper(f"({probleme})", place - len(libelle) - 2),
+                   styles["erreur"])
+        else:
+            ecrire(ligne_y, x, couper(libelle, place), styles["texte"])
 
-    def decouper(description):
-        return textwrap.wrap(description, width=largeur_texte)
+    # --- panneau de détail ---
+    if deux_panneaux:
+        x0, y0, hauteur_detail = largeur_menu, y, hauteur_panneaux
+    else:
+        x0, y0, hauteur_detail = 0, y + hauteur_menu, len(lignes_detail) + 2
+    if selection < len(entrees):
+        titre_detail = entrees[selection].libelle.lstrip("↳ ")
+        description = entrees[selection].description
+    elif selection == len(entrees):
+        titre_detail, description = t("quitter"), t("description_quitter")
+    else:
+        choisie = parties[selection - len(entrees) - 1]
+        titre_detail = t("titre_detail", nom=choisie.partie.champs.get("name", "?"))
+        description = t("description_partie")
+    _cadre(ecrire, y0, x0, hauteur_detail, largeur_detail, titre_detail, styles)
+    morceaux = decouper(description or "", largeur_texte)
+    indice = len(entrees) + 1
+    for n, (genre, valeur) in enumerate(lignes_detail):
+        ligne_y = y0 + 1 + n
+        if genre == "description":
+            if n < len(morceaux):
+                ecrire(ligne_y, x0 + 2, morceaux[n], styles["description"])
+        elif genre == "section":
+            _separation(ecrire, ligne_y, x0, largeur_detail, valeur, styles, "titre_infos")
+        else:
+            zones.append((ligne_y, x0, x0 + largeur_detail - 1, indice))
+            texte = couper(valeur.panneau or valeur.texte, largeur_texte)
+            if indice == selection:
+                ecrire(ligne_y, x0 + 1, "▌", styles["accent"])
+                ecrire(ligne_y, x0 + 2, texte.ljust(largeur_detail - 3), styles["selection"])
+            else:
+                ecrire(ligne_y, x0 + 2, texte,
+                       styles["texte" if valeur.section == "scores" else "discret"])
+            indice += 1
+    y += hauteur_corps
 
-    descriptions = [e.description for e in entrees]
-    descriptions.append(t("description_quitter") if any(descriptions) else "")
-    descriptions += [t("description_partie") for ligne in infos if ligne.partie]
-    hauteur_description = max(len(decouper(d)) for d in descriptions)
-    if hauteur_description:
-        for i, ligne in enumerate(decouper(descriptions[selection])):
-            ecrire(y + i, 0, ligne, styles["description"])
-        y += hauteur_description + 1
-
-    ecrire(y, 0, t("aide"), styles["aide"])
+    # --- rumeur, message et barre des touches ---
+    for n, ligne in enumerate(lignes_rumeur):
+        ecrire(y + 1 + n, max((largeur - len(ligne)) // 2, 0), ligne, styles["rumeur"])
     if message:
-        ecrire(y + 1, 0, message, styles["erreur"])
+        ecrire(hauteur - 2, 1, message, styles["erreur"])
+    _barre_touches(ecrire, hauteur - 1, largeur, styles)
     ecran.refresh()
     return zones
+
+
+def zone_cliquee(zones, y, x):
+    """Indice de la ligne cliquée en (y, x), sinon None."""
+    for zy, debut, fin, indice in zones:
+        if zy == y and debut <= x <= fin:
+            return indice
+    return None
 
 
 def _lancer_hors_curses(ecran, entree, journal):
@@ -1334,17 +1485,30 @@ def _lancer_hors_curses(ecran, entree, journal):
 
 
 def _afficher_partie_curses(ecran, partie, styles):
-    """Écran de détail d'une partie ; une touche ou un clic ramène au menu."""
+    """Écran de détail d'une partie, dans un cadre ; une touche ou un clic ramène au menu."""
     while True:
         ecran.erase()
         hauteur, largeur_ecran = ecran.getmaxyx()
-        lignes = details_partie(partie, largeur=min(largeur_ecran - 1, 100))
-        lignes += [("texte", ""), ("aide", t("retour_detail"))]
-        for y, (nom_style, texte) in enumerate(lignes[:hauteur]):
+
+        def ecrire(y, x, texte, attribut=curses.A_NORMAL):
+            place = largeur_ecran - x - 1
+            if y >= hauteur or place <= 0:
+                return x
             try:
-                ecran.addstr(y, 0, texte[: max(largeur_ecran - 1, 0)], styles[nom_style])
+                ecran.addstr(y, x, texte[:place], attribut)
             except curses.error:
                 pass
+            return x + len(texte)
+
+        largeur = max(min(largeur_ecran - 1, 100), 30)
+        titre, *lignes = details_partie(partie, largeur=largeur - 4)
+        if lignes and not lignes[0][1]:
+            lignes.pop(0)  # ligne vide sous le titre, inutile dans le cadre
+        lignes = lignes[: max(hauteur - 4, 0)]
+        _cadre(ecrire, 0, 0, len(lignes) + 2, largeur, titre[1], styles)
+        for y, (nom_style, texte) in enumerate(lignes, start=1):
+            ecrire(y, 1, couper(texte, largeur - 3), styles[nom_style])
+        ecrire(min(len(lignes) + 3, hauteur - 1), 1, t("retour_detail"), styles["aide"])
         ecran.refresh()
         try:
             touche = ecran.get_wch()
@@ -1368,6 +1532,7 @@ def _boucle_curses(ecran, entrees_config, options):
         pass
     curses.set_escdelay(25)
     ecran.keypad(True)
+    ecran.timeout(30000)  # redessine toutes les 30 s pour l'heure de l'en-tête
     styles = _styles_curses()
     if options.souris:
         # Clic : choisir une ligne ; double-clic : la lancer ; molette : monter ou descendre
@@ -1411,15 +1576,15 @@ def _boucle_curses(ecran, entrees_config, options):
 
         if touche == curses.KEY_MOUSE:
             try:
-                _, _, y, _, boutons = curses.getmouse()
+                _, x, y, _, boutons = curses.getmouse()
             except curses.error:
                 continue
             if boutons & curses.BUTTON4_PRESSED:
                 selection = (selection - 1) % nombre_lignes
             elif boutons & getattr(curses, "BUTTON5_PRESSED", 0):
                 selection = (selection + 1) % nombre_lignes
-            elif y in zones:
-                selection = zones[y]
+            elif zone_cliquee(zones, y, x) is not None:
+                selection = zone_cliquee(zones, y, x)
                 if boutons & curses.BUTTON1_DOUBLE_CLICKED:
                     touche = "\n"  # le double-clic vaut Entrée sur la ligne cliquée
             if touche != "\n":

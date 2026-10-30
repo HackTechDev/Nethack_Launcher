@@ -34,7 +34,14 @@ ou, depuis n'importe quel dossier (y compris via un lien symbolique, par exemple
 ./nethack_launcher.sh
 ```
 
-Le menu s'affiche en plein écran :
+Le menu s'affiche en plein écran, dans des cadres :
+
+- en haut, le titre, le logo (ou une ligne de titre si le terminal est peu haut) et l'heure ;
+- à gauche, le panneau des entrées, rangées par groupe ; la touche de chaque entrée est devant son libellé (son numéro si elle n'a pas de touche) ;
+- à droite, le panneau de détail : la description de la ligne choisie, puis les meilleurs scores et la dernière partie ;
+- sous les panneaux, une rumeur, et tout en bas la barre des touches.
+
+Dans un terminal de moins de 72 colonnes, le panneau de détail passe sous celui des entrées.
 
 - `↑` / `↓` pour choisir une entrée, `Entrée` pour la lancer (la ligne « Déconnexion », ou « Quitter », est aussi accessible aux flèches) ;
 - ou directement le numéro de l'entrée ou sa touche (`n` pour NetHack, `e` pour l'éditeur de secteurs, `m` pour la fabrique de robots, `d` pour le convertisseur Doom) ;
@@ -45,9 +52,9 @@ Quand le programme lancé se termine, appuyez sur Entrée pour revenir au menu.
 
 L'option `--texte` affiche à la place un menu simple, où l'on tape son choix puis Entrée. Ce menu est aussi utilisé automatiquement si l'entrée ou la sortie n'est pas un terminal.
 
-Sous le menu sont affichés une rumeur de NetHack tirée au hasard (celles des fortune cookies), les meilleurs scores et un résumé de la dernière partie, lus dans le journal des parties de NetHack (`xlogfile`). Les parties en mode wizard ou exploration ne comptent pas dans les meilleurs scores.
+Le menu affiche une rumeur de NetHack tirée au hasard (celles des fortune cookies), les meilleurs scores et un résumé de la dernière partie, lus dans le journal des parties de NetHack (`xlogfile`). Les parties en mode wizard ou exploration ne comptent pas dans les meilleurs scores.
 
-Les lignes des scores et de la dernière partie se choisissent aussi, avec les flèches (après « Déconnexion ») ou la souris. Entrée affiche alors le détail de la partie : personnage, fin de la partie, dates, temps de jeu, nombre de tours, profondeur atteinte, points de vie, or, conduites respectées et exploits. Dans le menu `--texte`, tapez `s1`, `s2`… pour le détail d'un score, ou `sd` pour la dernière partie.
+Les lignes des scores et de la dernière partie, dans le panneau de droite, se choisissent aussi, avec les flèches (après « Déconnexion ») ou la souris. Entrée affiche alors le détail de la partie : personnage, fin de la partie, dates, temps de jeu, nombre de tours, profondeur atteinte, points de vie, or, conduites respectées et exploits. Dans le menu `--texte`, tapez `s1`, `s2`… pour le détail d'un score, ou `sd` pour la dernière partie.
 
 Si le programme d'une entrée n'existe pas ou n'est pas exécutable, le menu l'indique à côté de son libellé, par exemple `(introuvable)`.
 
