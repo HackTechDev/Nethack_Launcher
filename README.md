@@ -5,6 +5,7 @@ Petit lanceur en Python qui affiche un menu en terminal pour démarrer :
 1. **NetHack** — `~/nh/install/games/nethack`
 2. **L'éditeur de secteurs** (cartes) — `~/JEUX/NETHACK/NetHack_MapEditor/nhmapedit.sh`
 3. **La fabrique de robots** (éditeur de monstres) — `~/JEUX/NETHACK/NetHack_MonsterEditor/nhmonedit.sh`
+4. **Le convertisseur Doom** (niveaux Doom vers NetHack) — `~/JEUX/NETHACK/Doom2Nethack/Doom2Nethack.sh`
 
 Le lanceur suit l'univers du jeu : avec la version cyberpunk de NetHack (`OPTIONS=language:fr@cyber`), il devient un terminal de Night City, avec les mêmes noms que le jeu (voir [Univers et traductions](#univers-et-traductions)).
 
@@ -36,7 +37,7 @@ ou, depuis n'importe quel dossier (y compris via un lien symbolique, par exemple
 Le menu s'affiche en plein écran :
 
 - `↑` / `↓` pour choisir une entrée, `Entrée` pour la lancer (la ligne « Déconnexion », ou « Quitter », est aussi accessible aux flèches) ;
-- ou directement le numéro de l'entrée ou sa touche (`n` pour NetHack, `e` pour l'éditeur de secteurs, `m` pour la fabrique de robots) ;
+- ou directement le numéro de l'entrée ou sa touche (`n` pour NetHack, `e` pour l'éditeur de secteurs, `m` pour la fabrique de robots, `d` pour le convertisseur Doom) ;
 - `q` ou `Échap` pour quitter ;
 - à la souris : un clic choisit une ligne, un double-clic la lance, la molette monte ou descend.
 
@@ -107,6 +108,13 @@ groupe = Atelier
 description = Façonne les héros de Night City (rôle, race, implants de départ, tuile) et lance un run avec eux.
 fichiers_recents = ~/JEUX/NETHACK/NetHack_HeroEditor/*.json
 heros = oui
+
+[doom]
+libelle = Convertisseur Doom
+chemin = ~/JEUX/NETHACK/Doom2Nethack/Doom2Nethack.sh
+touche = d
+groupe = Atelier
+description = Pirate les niveaux de Doom (fichiers WAD) et les recompile en secteurs de Night City.
 ```
 
 - `libelle` : texte affiché dans le menu (facultatif, le nom de la section est utilisé par défaut)
